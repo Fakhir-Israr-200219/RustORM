@@ -59,6 +59,20 @@ impl<E, T> Field<E, T> {
     pub const fn name(&self) -> &'static str {
         self.column.name()
     }
+
+    pub fn asc(&self) -> OrderBy {
+        OrderBy {
+            column: self.column,
+            direction: OrderDirection::Asc,
+        }
+    }
+
+    pub fn desc(&self) -> OrderBy {
+        OrderBy {
+            column: self.column,
+            direction: OrderDirection::Desc,
+        }
+    }
 }
 
 //
@@ -168,8 +182,17 @@ pub struct SelectStatement {
     columns: Vec<Column>,
     table: &'static str,
     where_clause: Option<Expression>,
+    order_by: Option<OrderBy>,
+}
+enum OrderDirection {
+    Asc,
+    Desc,
 }
 
+pub struct OrderBy {
+    column: Column,
+    direction: OrderDirection,
+}
 enum BinaryOperator {
     Eq,
     NotEq,
@@ -290,6 +313,7 @@ where
                 columns: E::columns().to_vec(),
                 table: E::TABLE,
                 where_clause: None,
+                order_by: None,
             },
             _entity: PhantomData,
         }
@@ -297,6 +321,11 @@ where
 
     pub fn where_(mut self, condition: Condition<E>) -> Self {
         self.statement.where_clause = Some(condition.into_ast());
+        self
+    }
+
+    pub fn order_by(mut self, order: OrderBy) -> Self {
+        self.statement.order_by = Some(order);
         self
     }
 }
@@ -319,10 +348,27 @@ where
             .join(", ");
 
         let mut sql = format!("SELECT {} FROM {}", columns, self.statement.table);
+
+        let mut next_placeholder = 1;
+
         if let Some(condition) = &self.statement.where_clause {
             sql.push_str(" WHERE ");
-            let mut next_placeholder = 1;
             sql.push_str(&compile_expression(condition, &mut next_placeholder));
+        }
+
+        if let Some(order_by) = &self.statement.order_by {
+            sql.push_str(" ORDER BY ");
+            sql.push_str(order_by.column.name());
+
+            match order_by.direction {
+                OrderDirection::Asc => {
+                    sql.push_str(" ASC");
+                }
+
+                OrderDirection::Desc => {
+                    sql.push_str(" DESC");
+                }
+            }
         }
 
         sql
@@ -485,5 +531,22 @@ mod tests {
         let sql = compile_expression(&condition.expression, &mut next_placeholder);
 
         assert_eq!(sql, "id > $1 OR name = $2");
+    }
+    #[test]
+    fn order_by_asc_works() {
+        let query = TestUser::find().order_by(TestUser::name.asc());
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC");
+    }
+
+    #[test]
+    fn order_by_desc_works() {
+        let query = TestUser::find().order_by(TestUser::id.desc());
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users ORDER BY id DESC");
     }
 }
