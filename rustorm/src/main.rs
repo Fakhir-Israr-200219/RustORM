@@ -1,4 +1,5 @@
-use rustorm::User;
+use rustorm::{Entity, User};
+
 use sqlx::PgPool;
 
 #[tokio::main]

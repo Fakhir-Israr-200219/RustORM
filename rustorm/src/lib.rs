@@ -1,9 +1,34 @@
 use std::marker::PhantomData;
 
+pub trait Entity {
+    type Model;
+
+    const TABLE: &'static str;
+
+    fn columns() -> &'static [&'static str];
+
+    fn find() -> Query<Self>
+    where
+        Self: Sized,
+    {
+        Query::new()
+    }
+}
+
 #[derive(Debug, sqlx::FromRow)]
 pub struct User {
     pub id: i32,
     pub name: String,
+}
+
+impl Entity for User {
+    type Model = User;
+
+    const TABLE: &'static str = "users";
+
+    fn columns() -> &'static [&'static str] {
+        &["id", "name"]
+    }
 }
 
 pub struct Field<T> {
@@ -26,15 +51,6 @@ impl User {
 
     #[allow(non_upper_case_globals)]
     pub const name: Field<String> = Field::new("name");
-
-    pub fn find() -> Query<User> {
-        Query {
-            table: "users",
-            condition: None,
-            limit: None,
-            _entity: PhantomData,
-        }
-    }
 }
 
 pub enum Value {
@@ -57,13 +73,20 @@ impl Field<String> {
 }
 
 pub struct Query<E> {
-    table: &'static str,
     condition: Option<Condition>,
     limit: Option<i64>,
     _entity: PhantomData<E>,
 }
 
 impl<E> Query<E> {
+    fn new() -> Self {
+        Self {
+            condition: None,
+            limit: None,
+            _entity: PhantomData,
+        }
+    }
+
     pub fn where_(mut self, condition: Condition) -> Self {
         self.condition = Some(condition);
         self
@@ -73,9 +96,16 @@ impl<E> Query<E> {
         self.limit = Some(limit);
         self
     }
+}
 
+impl<E> Query<E>
+where
+    E: Entity,
+{
     fn build_sql(&self) -> String {
-        let mut sql = format!("SELECT id, name FROM {}", self.table);
+        let columns = E::columns().join(", ");
+
+        let mut sql = format!("SELECT {} FROM {}", columns, E::TABLE);
 
         if let Some(condition) = &self.condition {
             sql.push_str(&format!(" WHERE {} = $1", condition.column));
@@ -83,6 +113,7 @@ impl<E> Query<E> {
 
         if self.limit.is_some() {
             let index = if self.condition.is_some() { 2 } else { 1 };
+
             sql.push_str(&format!(" LIMIT ${index}"));
         }
 
@@ -93,6 +124,7 @@ impl<E> Query<E> {
 impl Query<User> {
     pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<User>, sqlx::Error> {
         let sql = self.build_sql();
+
         let mut query = sqlx::query_as::<_, User>(&sql);
 
         if let Some(condition) = self.condition {
@@ -100,6 +132,7 @@ impl Query<User> {
                 Value::String(value) => {
                     query = query.bind(value);
                 }
+
                 Value::I64(value) => {
                     query = query.bind(value);
                 }
