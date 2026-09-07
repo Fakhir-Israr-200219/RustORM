@@ -998,12 +998,12 @@ impl User {
 ///wokring on ///
 /////////////////
 1. WHERE          ← already primitive form mein hai
-2. ORDER BY
+2. ORDER BY done
 3. LIMIT          ← already hai
-4. OFFSET
-5. DISTINCT
-6. GROUP BY
-7. HAVING
+4. OFFSET done
+5. DISTINCT done
+6. GROUP BY done
+7. HAVING done
 8. JOIN
 9. Subquery
 10. CTE

@@ -114,6 +114,26 @@ impl<E, T> Field<E, T> {
             _entity: PhantomData,
         }
     }
+
+    pub fn min(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Function {
+                function: AggregateFunction::Min,
+                expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
+
+    pub fn max(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Function {
+                function: AggregateFunction::Max,
+                expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
 }
 
 //
@@ -286,6 +306,8 @@ enum AggregateFunction {
     Count,
     Sum,
     Avg,
+    Min,
+    Max,
 }
 impl<E> Condition<E> {
     pub fn and(self, other: Condition<E>) -> Condition<E> {
@@ -394,6 +416,12 @@ fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> 
 
                 AggregateFunction::Avg => {
                     format!("AVG({})", expression_sql)
+                }
+                AggregateFunction::Min => {
+                    format!("MIN({})", expression_sql)
+                }
+                AggregateFunction::Max => {
+                    format!("MAX({})", expression_sql)
                 }
             }
         }
@@ -1062,6 +1090,73 @@ mod tests {
         assert_eq!(
             query.build_sql(),
             "SELECT name, AVG(id) FROM users GROUP BY name HAVING AVG(id) > $1"
+        );
+    }
+
+    #[test]
+    fn min_select_works() {
+        let query = TestUser::find().select(TestUser::id.min());
+
+        assert_eq!(query.build_sql(), "SELECT MIN(id) FROM users");
+    }
+
+    #[test]
+    fn max_select_works() {
+        let query = TestUser::find().select(TestUser::id.max());
+
+        assert_eq!(query.build_sql(), "SELECT MAX(id) FROM users");
+    }
+    #[test]
+    fn min_with_group_by_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.min())
+            .group_by(TestUser::name.column());
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, MIN(id) FROM users GROUP BY name"
+        );
+    }
+
+    #[test]
+    fn max_with_group_by_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.max())
+            .group_by(TestUser::name.column());
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, MAX(id) FROM users GROUP BY name"
+        );
+    }
+
+    #[test]
+    fn min_with_group_by_and_having_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.min())
+            .group_by(TestUser::name.column())
+            .having(TestUser::id.min().gt(1));
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, MIN(id) FROM users GROUP BY name HAVING MIN(id) > $1"
+        );
+    }
+
+    #[test]
+    fn max_with_group_by_and_having_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.max())
+            .group_by(TestUser::name.column())
+            .having(TestUser::id.max().gt(1));
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, MAX(id) FROM users GROUP BY name HAVING MAX(id) > $1"
         );
     }
 }
