@@ -185,6 +185,7 @@ pub struct SelectStatement {
     order_by: Option<OrderBy>,
     limit: Option<u64>,
     offset: Option<u64>,
+    distinct: bool,
 }
 enum OrderDirection {
     Asc,
@@ -318,6 +319,7 @@ where
                 order_by: None,
                 limit: None,
                 offset: None,
+                distinct: false,
             },
             _entity: PhantomData,
         }
@@ -342,6 +344,11 @@ where
         self.statement.offset = Some(offset);
         self
     }
+
+    pub fn distinct(mut self) -> Self {
+        self.statement.distinct = true;
+        self
+    }
 }
 
 //
@@ -361,7 +368,11 @@ where
             .collect::<Vec<_>>()
             .join(", ");
 
-        let mut sql = format!("SELECT {} FROM {}", columns, self.statement.table);
+        let mut sql = if self.statement.distinct {
+            format!("SELECT DISTINCT {} FROM {}", columns, self.statement.table)
+        } else {
+            format!("SELECT {} FROM {}", columns, self.statement.table)
+        };
 
         let mut next_placeholder = 1;
 
@@ -619,6 +630,30 @@ mod tests {
         assert_eq!(
             sql,
             "SELECT id, name FROM users ORDER BY id ASC LIMIT 20 OFFSET 40"
+        );
+    }
+    #[test]
+    fn distinct_works() {
+        let query = TestUser::find().distinct();
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT DISTINCT id, name FROM users");
+    }
+
+    #[test]
+    fn distinct_with_order_by_limit_offset_works() {
+        let query = TestUser::find()
+            .distinct()
+            .order_by(TestUser::name.asc())
+            .take(20)
+            .skip(40);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT DISTINCT id, name FROM users ORDER BY name ASC LIMIT 20 OFFSET 40"
         );
     }
 }
