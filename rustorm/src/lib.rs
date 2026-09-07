@@ -177,6 +177,8 @@ enum BinaryOperator {
     Gte,
     Lt,
     Lte,
+    And,
+    Or,
 }
 enum Expression {
     Column(Column),
@@ -189,6 +191,28 @@ enum Expression {
 }
 
 impl<E> Condition<E> {
+    pub fn and(self, other: Condition<E>) -> Condition<E> {
+        Condition {
+            expression: Expression::Binary {
+                left: Box::new(self.expression),
+                operator: BinaryOperator::And,
+                right: Box::new(other.expression),
+            },
+            _entity: PhantomData,
+        }
+    }
+
+    pub fn or(self, other: Condition<E>) -> Condition<E> {
+        Condition {
+            expression: Expression::Binary {
+                left: Box::new(self.expression),
+                operator: BinaryOperator::Or,
+                right: Box::new(other.expression),
+            },
+            _entity: PhantomData,
+        }
+    }
+
     fn into_ast(self) -> Expression {
         self.expression
     }
@@ -202,18 +226,42 @@ pub struct Query<E> {
     statement: SelectStatement,
     _entity: PhantomData<E>,
 }
-fn compile_expression(expression: &Expression) -> String {
+fn collect_bind_values(expression: &Expression, values: &mut Vec<BindValue>) {
+    match expression {
+        Expression::Column(_) => {}
+
+        Expression::Value(value) => match value {
+            BindValue::String(value) => {
+                values.push(BindValue::String(value.clone()));
+            }
+
+            BindValue::I64(value) => {
+                values.push(BindValue::I64(*value));
+            }
+        },
+
+        Expression::Binary { left, right, .. } => {
+            collect_bind_values(left, values);
+            collect_bind_values(right, values);
+        }
+    }
+}
+fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> String {
     match expression {
         Expression::Column(column) => column.name().to_string(),
 
-        Expression::Value(_) => "$1".to_string(),
+        Expression::Value(_) => {
+            let placeholder = format!("${}", *next_placeholder);
+            *next_placeholder += 1;
+            placeholder
+        }
 
         Expression::Binary {
             left,
             operator,
             right,
         } => {
-            let left_sql = compile_expression(left);
+            let left_sql = compile_expression(left, next_placeholder);
 
             let operator_sql = match operator {
                 BinaryOperator::Eq => "=",
@@ -222,9 +270,11 @@ fn compile_expression(expression: &Expression) -> String {
                 BinaryOperator::Gte => ">=",
                 BinaryOperator::Lt => "<",
                 BinaryOperator::Lte => "<=",
+                BinaryOperator::And => "AND",
+                BinaryOperator::Or => "OR",
             };
 
-            let right_sql = compile_expression(right);
+            let right_sql = compile_expression(right, next_placeholder);
 
             format!("{} {} {}", left_sql, operator_sql, right_sql)
         }
@@ -271,7 +321,8 @@ where
         let mut sql = format!("SELECT {} FROM {}", columns, self.statement.table);
         if let Some(condition) = &self.statement.where_clause {
             sql.push_str(" WHERE ");
-            sql.push_str(&compile_expression(condition));
+            let mut next_placeholder = 1;
+            sql.push_str(&compile_expression(condition, &mut next_placeholder));
         }
 
         sql
@@ -287,17 +338,18 @@ where
         let sql = self.build_sql();
         let mut query = sqlx::query_as::<_, E::Model>(&sql);
 
-        if let Some(expression) = self.statement.where_clause {
-            if let Expression::Binary { right, .. } = expression {
-                if let Expression::Value(value) = *right {
-                    match value {
-                        BindValue::String(value) => {
-                            query = query.bind(value);
-                        }
+        if let Some(expression) = &self.statement.where_clause {
+            let mut values = Vec::new();
 
-                        BindValue::I64(value) => {
-                            query = query.bind(value);
-                        }
+            collect_bind_values(expression, &mut values);
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
                     }
                 }
             }
@@ -413,5 +465,25 @@ mod tests {
         let sql = query.build_sql();
 
         assert_eq!(sql, "SELECT id, name FROM users WHERE id <= $1");
+    }
+    #[test]
+    fn and_condition_works() {
+        let condition = TestUser::id.gt(10).and(TestUser::name.eq("Fakhir"));
+
+        let mut next_placeholder = 1;
+
+        let sql = compile_expression(&condition.expression, &mut next_placeholder);
+
+        assert_eq!(sql, "id > $1 AND name = $2");
+    }
+    #[test]
+    fn or_condition_works() {
+        let condition = TestUser::id.gt(10).or(TestUser::name.eq("Fakhir"));
+
+        let mut next_placeholder = 1;
+
+        let sql = compile_expression(&condition.expression, &mut next_placeholder);
+
+        assert_eq!(sql, "id > $1 OR name = $2");
     }
 }
