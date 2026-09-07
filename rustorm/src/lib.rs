@@ -94,6 +94,16 @@ impl<E, T> Field<E, T> {
     pub fn column(&self) -> Column {
         self.column
     }
+
+    pub fn sum(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Function {
+                function: AggregateFunction::Sum,
+                expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
 }
 
 //
@@ -264,6 +274,7 @@ enum Expression {
 
 enum AggregateFunction {
     Count,
+    Sum,
 }
 impl<E> Condition<E> {
     pub fn and(self, other: Condition<E>) -> Condition<E> {
@@ -364,6 +375,10 @@ fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> 
             match function {
                 AggregateFunction::Count => {
                     format!("COUNT({})", expression_sql)
+                }
+
+                AggregateFunction::Sum => {
+                    format!("SUM({})", expression_sql)
                 }
             }
         }
@@ -962,5 +977,34 @@ mod tests {
             BindValue::I64(value) => assert_eq!(*value, 1),
             _ => panic!("expected aggregate HAVING bind value to be i64"),
         }
+    }
+    #[test]
+    fn sum_select_works() {
+        let query = TestUser::find().select(TestUser::id.sum());
+        assert_eq!(query.build_sql(), "SELECT SUM(id) FROM users");
+    }
+    #[test]
+    fn sum_with_where_works() {
+        let query = TestUser::find()
+            .where_(TestUser::name.eq("Fakhir"))
+            .select(TestUser::id.sum());
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT SUM(id) FROM users WHERE name = $1"
+        );
+    }
+    #[test]
+    fn sum_with_group_by_and_having_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.sum())
+            .group_by(TestUser::name.column())
+            .having(TestUser::id.sum().gt(2));
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, SUM(id) FROM users GROUP BY name HAVING SUM(id) > $1"
+        );
     }
 }

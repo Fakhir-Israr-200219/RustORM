@@ -9,8 +9,18 @@ pub struct UserModel {
 
 #[derive(Debug, sqlx::FromRow)]
 struct UserCount {
+    #[allow(dead_code)]
     name: String,
+    #[allow(dead_code)]
     count: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct UserSum {
+    #[allow(dead_code)]
+    name: String,
+    #[allow(dead_code)]
+    sum: i64,
 }
 
 pub struct User;
@@ -75,7 +85,23 @@ async fn main() -> Result<(), sqlx::Error> {
         .having(User::id.count().gt(1))
         .fetch_all::<UserCount>(&db)
         .await?;
+    let user_id_sum = User::find().select(User::id.sum()).count(&db).await?;
+    let user_id_sum_with_where = User::find()
+        .where_(User::name.eq("Fakhir"))
+        .select(User::id.sum())
+        .count(&db)
+        .await?;
+    let grouped_sums = User::find()
+        .select(User::name.select())
+        .select(User::id.sum())
+        .group_by(User::name.column())
+        .having(User::id.sum().gt(2))
+        .fetch_all::<UserSum>(&db)
+        .await?;
 
+    println!("Grouped sums: {grouped_sums:#?}");
+    println!("User ID sum with where_: {user_id_sum_with_where}");
+    println!("User ID sum: {user_id_sum}");
     println!("Users: {users:#?}");
     println!("User count: {user_count}");
     println!("Posts: {posts:#?}");
