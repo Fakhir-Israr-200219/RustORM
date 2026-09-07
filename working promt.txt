@@ -764,7 +764,8 @@ Expression ^|-- done
 working on AND or OR operator   ^|-- done
 working on Order by     ^|-- done
 working on LIMIT ^|-- done
-working on offset 
+working on offset ^|-- done
+working on DISTINCT 
 
 
 

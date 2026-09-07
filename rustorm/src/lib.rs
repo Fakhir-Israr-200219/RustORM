@@ -184,6 +184,7 @@ pub struct SelectStatement {
     where_clause: Option<Expression>,
     order_by: Option<OrderBy>,
     limit: Option<u64>,
+    offset: Option<u64>,
 }
 enum OrderDirection {
     Asc,
@@ -316,6 +317,7 @@ where
                 where_clause: None,
                 order_by: None,
                 limit: None,
+                offset: None,
             },
             _entity: PhantomData,
         }
@@ -333,6 +335,11 @@ where
 
     pub fn take(mut self, limit: u64) -> Self {
         self.statement.limit = Some(limit);
+        self
+    }
+
+    pub fn skip(mut self, offset: u64) -> Self {
+        self.statement.offset = Some(offset);
         self
     }
 }
@@ -380,6 +387,10 @@ where
 
         if let Some(limit) = self.statement.limit {
             sql.push_str(&format!(" LIMIT {}", limit));
+        }
+
+        if let Some(offset) = self.statement.offset {
+            sql.push_str(&format!(" OFFSET {}", offset));
         }
 
         sql
@@ -576,5 +587,38 @@ mod tests {
         let sql = query.build_sql();
 
         assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC LIMIT 20");
+    }
+
+    #[test]
+    fn offset_works() {
+        let query = TestUser::find().skip(40);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users OFFSET 40");
+    }
+
+    #[test]
+    fn limit_with_offset_works() {
+        let query = TestUser::find().take(20).skip(40);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users LIMIT 20 OFFSET 40");
+    }
+
+    #[test]
+    fn order_by_limit_offset_works() {
+        let query = TestUser::find()
+            .order_by(TestUser::id.asc())
+            .take(20)
+            .skip(40);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users ORDER BY id ASC LIMIT 20 OFFSET 40"
+        );
     }
 }
