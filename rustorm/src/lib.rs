@@ -183,6 +183,7 @@ pub struct SelectStatement {
     table: &'static str,
     where_clause: Option<Expression>,
     order_by: Option<OrderBy>,
+    limit: Option<u64>,
 }
 enum OrderDirection {
     Asc,
@@ -314,6 +315,7 @@ where
                 table: E::TABLE,
                 where_clause: None,
                 order_by: None,
+                limit: None,
             },
             _entity: PhantomData,
         }
@@ -326,6 +328,11 @@ where
 
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.statement.order_by = Some(order);
+        self
+    }
+
+    pub fn take(mut self, limit: u64) -> Self {
+        self.statement.limit = Some(limit);
         self
     }
 }
@@ -369,6 +376,10 @@ where
                     sql.push_str(" DESC");
                 }
             }
+        }
+
+        if let Some(limit) = self.statement.limit {
+            sql.push_str(&format!(" LIMIT {}", limit));
         }
 
         sql
@@ -548,5 +559,22 @@ mod tests {
         let sql = query.build_sql();
 
         assert_eq!(sql, "SELECT id, name FROM users ORDER BY id DESC");
+    }
+    #[test]
+    fn limit_works() {
+        let query = TestUser::find().take(20);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users LIMIT 20");
+    }
+
+    #[test]
+    fn order_by_with_limit_works() {
+        let query = TestUser::find().order_by(TestUser::name.asc()).take(20);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC LIMIT 20");
     }
 }

@@ -762,8 +762,11 @@ Expression ^|-- done
 │   └── ... ^|-- done
 └── ...  ^|-- done
 working on AND or OR operator   ^|-- done
-working on Order by
+working on Order by     ^|-- done
+working on LIMIT ^|-- done
+working on offset 
 
 
 
 Lekin ek important distinction: abhi humne unit-level AST/compiler test kiya hai. Abhi actual PostgreSQL par nested AND/OR query execute karke verify nahi kiya. Wo next logical verification hoga.
+Yahan ek interesting architectural point bhi hai: LIMIT bind parameter bhi ho sakta hai (LIMIT $2), lekin abhi hum simple literal LIMIT 20 rakhenge. Pehle query AST ko stable karte hain.
