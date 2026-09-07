@@ -186,6 +186,7 @@ pub struct SelectStatement {
     limit: Option<u64>,
     offset: Option<u64>,
     distinct: bool,
+    group_by: Vec<Column>,
 }
 enum OrderDirection {
     Asc,
@@ -320,6 +321,7 @@ where
                 limit: None,
                 offset: None,
                 distinct: false,
+                group_by: Vec::new(),
             },
             _entity: PhantomData,
         }
@@ -347,6 +349,11 @@ where
 
     pub fn distinct(mut self) -> Self {
         self.statement.distinct = true;
+        self
+    }
+
+    pub fn group_by(mut self, column: Column) -> Self {
+        self.statement.group_by.push(column);
         self
     }
 }
@@ -379,6 +386,20 @@ where
         if let Some(condition) = &self.statement.where_clause {
             sql.push_str(" WHERE ");
             sql.push_str(&compile_expression(condition, &mut next_placeholder));
+        }
+
+        if !self.statement.group_by.is_empty() {
+            sql.push_str(" GROUP BY ");
+
+            let columns = self
+                .statement
+                .group_by
+                .iter()
+                .map(|column| column.name())
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            sql.push_str(&columns);
         }
 
         if let Some(order_by) = &self.statement.order_by {
@@ -504,117 +525,89 @@ mod tests {
     #[test]
     fn not_eq_operator_works() {
         let query = TestUser::find().where_(TestUser::id.not_eq(10));
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users WHERE id <> $1");
     }
 
     #[test]
     fn gt_operator_works() {
         let query = TestUser::find().where_(TestUser::id.gt(10));
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users WHERE id > $1");
     }
 
     #[test]
     fn gte_operator_works() {
         let query = TestUser::find().where_(TestUser::id.gte(10));
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users WHERE id >= $1");
     }
 
     #[test]
     fn lt_operator_works() {
         let query = TestUser::find().where_(TestUser::id.lt(10));
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users WHERE id < $1");
     }
 
     #[test]
     fn lte_operator_works() {
         let query = TestUser::find().where_(TestUser::id.lte(10));
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users WHERE id <= $1");
     }
     #[test]
     fn and_condition_works() {
         let condition = TestUser::id.gt(10).and(TestUser::name.eq("Fakhir"));
-
         let mut next_placeholder = 1;
-
         let sql = compile_expression(&condition.expression, &mut next_placeholder);
-
         assert_eq!(sql, "id > $1 AND name = $2");
     }
     #[test]
     fn or_condition_works() {
         let condition = TestUser::id.gt(10).or(TestUser::name.eq("Fakhir"));
-
         let mut next_placeholder = 1;
-
         let sql = compile_expression(&condition.expression, &mut next_placeholder);
-
         assert_eq!(sql, "id > $1 OR name = $2");
     }
     #[test]
     fn order_by_asc_works() {
         let query = TestUser::find().order_by(TestUser::name.asc());
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC");
     }
 
     #[test]
     fn order_by_desc_works() {
         let query = TestUser::find().order_by(TestUser::id.desc());
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users ORDER BY id DESC");
     }
     #[test]
     fn limit_works() {
         let query = TestUser::find().take(20);
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users LIMIT 20");
     }
 
     #[test]
     fn order_by_with_limit_works() {
         let query = TestUser::find().order_by(TestUser::name.asc()).take(20);
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC LIMIT 20");
     }
 
     #[test]
     fn offset_works() {
         let query = TestUser::find().skip(40);
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users OFFSET 40");
     }
 
     #[test]
     fn limit_with_offset_works() {
         let query = TestUser::find().take(20).skip(40);
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT id, name FROM users LIMIT 20 OFFSET 40");
     }
 
@@ -626,7 +619,6 @@ mod tests {
             .skip(40);
 
         let sql = query.build_sql();
-
         assert_eq!(
             sql,
             "SELECT id, name FROM users ORDER BY id ASC LIMIT 20 OFFSET 40"
@@ -635,9 +627,7 @@ mod tests {
     #[test]
     fn distinct_works() {
         let query = TestUser::find().distinct();
-
         let sql = query.build_sql();
-
         assert_eq!(sql, "SELECT DISTINCT id, name FROM users");
     }
 
@@ -654,6 +644,28 @@ mod tests {
         assert_eq!(
             sql,
             "SELECT DISTINCT id, name FROM users ORDER BY name ASC LIMIT 20 OFFSET 40"
+        );
+    }
+
+    #[test]
+    fn group_by_works() {
+        let query = TestUser::find().group_by(TestUser::name.column);
+        let sql = query.build_sql();
+        assert_eq!(sql, "SELECT id, name FROM users GROUP BY name");
+    }
+    #[test]
+    fn group_by_with_order_by_limit_offset_works() {
+        let query = TestUser::find()
+            .group_by(TestUser::name.column)
+            .order_by(TestUser::name.asc())
+            .take(20)
+            .skip(40);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users GROUP BY name ORDER BY name ASC LIMIT 20 OFFSET 40"
         );
     }
 }
