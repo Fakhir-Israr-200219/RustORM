@@ -1,24 +1,5 @@
 use std::marker::PhantomData;
 
-//
-// Entity
-//
-
-// pub trait Entity {
-//     type Model;
-
-//     const TABLE: &'static str;
-
-//     fn columns() -> &'static [Column];
-
-//     fn find() -> Query<Self>
-//     where
-//         Self: Sized,
-//     {
-//         Query::new()
-//     }
-// }
-
 pub trait Entity {
     type Model;
 
@@ -85,8 +66,7 @@ impl<E, T> Field<E, T> {
 //
 
 pub struct Condition<E> {
-    column: Column,
-    value: BindValue,
+    expression: Expression,
     _entity: PhantomData<E>,
 }
 
@@ -104,12 +84,39 @@ enum BindValue {
 //
 
 impl<E> Field<E, String> {
-    pub fn eq(&self, value: impl Into<String>) -> Condition<E> {
+    fn compare(&self, operator: BinaryOperator, value: impl Into<String>) -> Condition<E> {
         Condition {
-            column: self.column,
-            value: BindValue::String(value.into()),
+            expression: Expression::Binary {
+                left: Box::new(Expression::Column(self.column)),
+                operator,
+                right: Box::new(Expression::Value(BindValue::String(value.into()))),
+            },
             _entity: PhantomData,
         }
+    }
+
+    pub fn eq(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::Eq, value)
+    }
+
+    pub fn not_eq(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::NotEq, value)
+    }
+
+    pub fn gt(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::Gt, value)
+    }
+
+    pub fn gte(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::Gte, value)
+    }
+
+    pub fn lt(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::Lt, value)
+    }
+
+    pub fn lte(&self, value: impl Into<String>) -> Condition<E> {
+        self.compare(BinaryOperator::Lte, value)
     }
 }
 
@@ -118,12 +125,39 @@ impl<E> Field<E, String> {
 //
 
 impl<E> Field<E, i32> {
-    pub fn eq(&self, value: i32) -> Condition<E> {
+    fn compare(&self, operator: BinaryOperator, value: i32) -> Condition<E> {
         Condition {
-            column: self.column,
-            value: BindValue::I64(value as i64),
+            expression: Expression::Binary {
+                left: Box::new(Expression::Column(self.column)),
+                operator,
+                right: Box::new(Expression::Value(BindValue::I64(value as i64))),
+            },
             _entity: PhantomData,
         }
+    }
+
+    pub fn eq(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::Eq, value)
+    }
+
+    pub fn not_eq(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::NotEq, value)
+    }
+
+    pub fn gt(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::Gt, value)
+    }
+
+    pub fn gte(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::Gte, value)
+    }
+
+    pub fn lt(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::Lt, value)
+    }
+
+    pub fn lte(&self, value: i32) -> Condition<E> {
+        self.compare(BinaryOperator::Lte, value)
     }
 }
 
@@ -133,26 +167,30 @@ impl<E> Field<E, i32> {
 pub struct SelectStatement {
     columns: Vec<Column>,
     table: &'static str,
-    where_clause: Option<ConditionValue>,
+    where_clause: Option<Expression>,
 }
 
-// pub struct Condition<E> { // ye upar define hy bhai
-//     column: Column,
-//     value: BindValue,
-//     _entity: PhantomData<E>,
-// }
-
-struct ConditionValue {
-    column: Column,
-    value: BindValue,
+enum BinaryOperator {
+    Eq,
+    NotEq,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+}
+enum Expression {
+    Column(Column),
+    Value(BindValue),
+    Binary {
+        left: Box<Expression>,
+        operator: BinaryOperator,
+        right: Box<Expression>,
+    },
 }
 
 impl<E> Condition<E> {
-    fn into_ast(self) -> ConditionValue {
-        ConditionValue {
-            column: self.column,
-            value: self.value,
-        }
+    fn into_ast(self) -> Expression {
+        self.expression
     }
 }
 
@@ -160,17 +198,38 @@ impl<E> Condition<E> {
 // Query
 //
 
-// pub struct Query<E> {
-//     condition: Option<Condition<E>>,
-//     limit: Option<i64>,
-//     _entity: PhantomData<E>,
-// }
-
 pub struct Query<E> {
     statement: SelectStatement,
     _entity: PhantomData<E>,
 }
+fn compile_expression(expression: &Expression) -> String {
+    match expression {
+        Expression::Column(column) => column.name().to_string(),
 
+        Expression::Value(_) => "$1".to_string(),
+
+        Expression::Binary {
+            left,
+            operator,
+            right,
+        } => {
+            let left_sql = compile_expression(left);
+
+            let operator_sql = match operator {
+                BinaryOperator::Eq => "=",
+                BinaryOperator::NotEq => "<>",
+                BinaryOperator::Gt => ">",
+                BinaryOperator::Gte => ">=",
+                BinaryOperator::Lt => "<",
+                BinaryOperator::Lte => "<=",
+            };
+
+            let right_sql = compile_expression(right);
+
+            format!("{} {} {}", left_sql, operator_sql, right_sql)
+        }
+    }
+}
 impl<E> Query<E>
 where
     E: Entity,
@@ -210,20 +269,14 @@ where
             .join(", ");
 
         let mut sql = format!("SELECT {} FROM {}", columns, self.statement.table);
-
         if let Some(condition) = &self.statement.where_clause {
-            sql.push_str(&format!(" WHERE {} = $1", condition.column.name()));
+            sql.push_str(" WHERE ");
+            sql.push_str(&compile_expression(condition));
         }
 
         sql
     }
 }
-
-//
-// PostgreSQL execution
-//
-// This is intentionally kept behind the query API for now.
-//
 
 impl<E> Query<E>
 where
@@ -232,17 +285,20 @@ where
 {
     pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<E::Model>, sqlx::Error> {
         let sql = self.build_sql();
-
         let mut query = sqlx::query_as::<_, E::Model>(&sql);
 
-        if let Some(condition) = self.statement.where_clause {
-            match condition.value {
-                BindValue::String(value) => {
-                    query = query.bind(value);
-                }
+        if let Some(expression) = self.statement.where_clause {
+            if let Expression::Binary { right, .. } = expression {
+                if let Expression::Value(value) = *right {
+                    match value {
+                        BindValue::String(value) => {
+                            query = query.bind(value);
+                        }
 
-                BindValue::I64(value) => {
-                    query = query.bind(value);
+                        BindValue::I64(value) => {
+                            query = query.bind(value);
+                        }
+                    }
                 }
             }
         }
@@ -313,5 +369,49 @@ mod tests {
         let query = TestUser::find().where_(condition);
         let sql = query.build_sql();
         assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
+    }
+    #[test]
+    fn not_eq_operator_works() {
+        let query = TestUser::find().where_(TestUser::id.not_eq(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id <> $1");
+    }
+
+    #[test]
+    fn gt_operator_works() {
+        let query = TestUser::find().where_(TestUser::id.gt(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id > $1");
+    }
+
+    #[test]
+    fn gte_operator_works() {
+        let query = TestUser::find().where_(TestUser::id.gte(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id >= $1");
+    }
+
+    #[test]
+    fn lt_operator_works() {
+        let query = TestUser::find().where_(TestUser::id.lt(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id < $1");
+    }
+
+    #[test]
+    fn lte_operator_works() {
+        let query = TestUser::find().where_(TestUser::id.lte(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id <= $1");
     }
 }

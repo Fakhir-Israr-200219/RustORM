@@ -748,8 +748,19 @@ Pehle ye foundation solid karte hain. Uske baad ek-ek feature add karna kaafi cl
 ||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
 |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-now current working on query AST
-
+now current working on query AST ^|-- done
+now current working is Expression
+Next logical step AST ke andar expression/condition representation ko proper banana hai.
+Expression
+├── Column
+├── Value
+├── Binary
+│   ├── Eq
+│   ├── Ne
+│   ├── Gt
+│   ├── Lt
+│   └── ...
+└── ...
 
 
 
