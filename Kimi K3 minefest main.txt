@@ -993,3 +993,127 @@ impl User {
     pub const name: Field<String> = Field::new("name");
 }
 
+
+/////////////////
+///wokring on ///
+/////////////////
+1. WHERE
+2. GROUP BY
+3. HAVING
+4. ORDER BY
+5. LIMIT
+6. OFFSET
+7. JOIN (INNER, LEFT, RIGHT)
+8. DISTINCT
+9. UNION
+10. WITH (CTE)
+11. FOR UPDATE
+12. Subquery (nested SELECT)
+
+
+
+
+/////////////////
+////wish list////
+/////////////////
+
+1. WHERE
+2. GROUP BY
+3. HAVING
+4. ORDER BY
+5. LIMIT
+6. OFFSET
+7. FOR UPDATE / FOR SHARE (Locking)
+8. JOIN (INNER, LEFT, RIGHT, FULL, CROSS)
+9. UNION / INTERSECT / EXCEPT
+10. WITH (CTE - Common Table Expressions)
+11. DISTINCT
+12. DISTINCT ON (PostgreSQL)
+13. FETCH FIRST (SQL Server/Oracle)
+14. SAMPLE (Oracle/Teradata)
+15. WINDOW (Window functions clause)
+16. QUALIFY (Snowflake/Teradata - filter on window functions)
+17. TABLESAMPLE (PostgreSQL/MySQL - random sampling)
+18. LATERAL (PostgreSQL - lateral joins)
+19. ARRAY (PostgreSQL - array operations)
+20. JSON (JSON functions/operators)
+21. FULLTEXT (MySQL - MATCH AGAINST)
+22. PIVOT (SQL Server/Oracle)
+23. UNPIVOT
+24. CONNECT BY (Oracle hierarchical queries)
+25. START WITH (Oracle)
+26. ORDER SIBLINGS BY (Oracle)
+27. MODEL (Oracle)
+28. PARTITION BY (Analytic functions)
+29. ROWS/RANGE BETWEEN (Window frame)
+30. FILTER (Aggregate filter clause - PostgreSQL)
+31. WITHIN GROUP (Ordered-set aggregates - PostgreSQL)
+32. RECURSIVE (Recursive CTE)
+33. MATERIALIZED / NOT MATERIALIZED (CTE hints)
+34. SKIP LOCKED (PostgreSQL/MySQL)
+35. NOWAIT (Locking option)
+36. WAIT (Locking timeout - SQL Server)
+37. OPTIMIZE FOR (Query hints - SQL Server)
+38. WITH (Table hints - SQL Server)
+39. USE INDEX (MySQL index hints)
+40. FORCE INDEX (MySQL)
+41. IGNORE INDEX (MySQL)
+42. STRAIGHT_JOIN (MySQL)
+43. SQL_CALC_FOUND_ROWS (MySQL - deprecated)
+44. SQL_NO_CACHE (MySQL)
+45. HIGH_PRIORITY (MySQL)
+46. LOW_PRIORITY (MySQL)
+47. DELAYED (MySQL - for INSERT but not SELECT)
+48. ALL (Set quantifier)
+49. TOP (SQL Server - SELECT TOP n)
+50. FIRST (Some databases)
+51. BULK (SQL Server - BULK options)
+52. WITH (NOLOCK, READPAST - SQL Server table hints)
+53. CYCLE (Recursive CTE cycle detection)
+54. SEARCH (Recursive CTE search order)
+55. RETURNING (PostgreSQL - but for DML not SELECT)
+56. OUTPUT (SQL Server - but for DML not SELECT)
+57. FOR BROWSE (SQL Server)
+58. FOR XML (SQL Server)
+59. FOR JSON (SQL Server)
+60. FOR PATH (SQL Server)
+61. FOR AUTO (SQL Server)
+62. FOR EXPLICIT (SQL Server)
+63. FOR RAW (SQL Server)
+64. PIVOT XML (SQL Server)
+65. UNPIVOT XML (SQL Server)
+66. CUBE (Grouping)
+67. ROLLUP (Grouping)
+68. GROUPING SETS
+69. WITH TOTALS (ClickHouse)
+70. ARRAY JOIN (ClickHouse)
+71. SAMPLE (ClickHouse - different syntax)
+72. FINAL (ClickHouse - for ReplacingMergeTree)
+73. SETTINGS (ClickHouse)
+74. FORMAT (ClickHouse)
+75. INTO OUTFILE (MySQL)
+76. DUMPFILE (MySQL)
+77. PROCEDURE (MySQL - procedure analyse)
+78. QUICK (MySQL - for DELETE not SELECT)
+79. SQL_BIG_RESULT (MySQL)
+80. SQL_SMALL_RESULT (MySQL)
+81. SQL_BUFFER_RESULT (MySQL)
+82. STRAIGHT_JOIN (MySQL - as join hint)
+83. NO_REWRITE (PostgreSQL)
+84. COST (PostgreSQL - cost estimate hint)
+85. ROWS (PostgreSQL - rows estimate hint)
+86. GENSTATS (PostgreSQL)
+87. JOINS (PostgreSQL join order hint)
+88. LEADING (PostgreSQL join order hint)
+89. USE_HASH (PostgreSQL)
+90. USE_MERGE (PostgreSQL)
+91. USE_NL (PostgreSQL)
+92. PARALLEL (PostgreSQL)
+93. INDEX (PostgreSQL index scan hint)
+94. INDEXSCAN (PostgreSQL)
+95. SEQSCAN (PostgreSQL)
+96. GATHER (PostgreSQL)
+97. RESCAN (PostgreSQL)
+98. INCLUDE (PostgreSQL - for indexes, not SELECT)
+99. OMIT (PostgreSQL)
+100. SET (For setting session variables within query)

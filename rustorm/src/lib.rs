@@ -14,23 +14,6 @@ pub trait Entity {
         Query::new()
     }
 }
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct User {
-    pub id: i32,
-    pub name: String,
-}
-
-impl Entity for User {
-    type Model = User;
-
-    const TABLE: &'static str = "users";
-
-    fn columns() -> &'static [&'static str] {
-        &["id", "name"]
-    }
-}
-
 pub struct Field<T> {
     name: &'static str,
     _marker: PhantomData<T>,
@@ -44,15 +27,6 @@ impl<T> Field<T> {
         }
     }
 }
-
-impl User {
-    #[allow(non_upper_case_globals)]
-    pub const id: Field<i32> = Field::new("id");
-
-    #[allow(non_upper_case_globals)]
-    pub const name: Field<String> = Field::new("name");
-}
-
 pub enum Value {
     String(String),
     I64(i64),
@@ -158,10 +132,52 @@ where
 mod tests {
     use super::*;
 
+    struct TestUser;
+
+    #[derive(Debug)]
+    struct TestUserModel;
+
+    impl Entity for TestUser {
+        type Model = TestUserModel;
+
+        const TABLE: &'static str = "users";
+
+        fn columns() -> &'static [&'static str] {
+            &["id", "name"]
+        }
+    }
+
+    impl TestUser {
+        #[allow(non_upper_case_globals)]
+        const name: Field<String> = Field::new("name");
+    }
+
+
+    struct TestPost;
+
+    #[derive(Debug)]
+    struct TestPostModel;
+
+    impl Entity for TestPost {
+        type Model = TestPostModel;
+
+        const TABLE: &'static str = "posts";
+
+        fn columns() -> &'static [&'static str] {
+            &["id", "title"]
+        }
+    }
+
+    impl TestPost {
+        #[allow(non_upper_case_globals)]
+        const title: Field<String> = Field::new("title");
+    }
+
+
     #[test]
-    fn build_user_query() {
-        let query = User::find()
-            .where_(User::name.eq("Fakhir"))
+    fn user_query_is_generic() {
+        let query = TestUser::find()
+            .where_(TestUser::name.eq("Fakhir"))
             .take(20);
 
         let sql = query.build_sql();
@@ -169,6 +185,21 @@ mod tests {
         assert_eq!(
             sql,
             "SELECT id, name FROM users WHERE name = $1 LIMIT $2"
+        );
+    }
+
+
+    #[test]
+    fn post_query_is_generic() {
+        let query = TestPost::find()
+            .where_(TestPost::title.eq("Rust"))
+            .take(10);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, title FROM posts WHERE title = $1 LIMIT $2"
         );
     }
 }
