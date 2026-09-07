@@ -11,16 +11,13 @@ pub struct User;
 
 impl Entity for User {
     type Model = UserModel;
-
     const TABLE: &'static str = "users";
-
     const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl User {
     #[allow(non_upper_case_globals)]
     pub const id: Field<Self, i32> = Field::new("id");
-
     #[allow(non_upper_case_globals)]
     pub const name: Field<Self, String> = Field::new("name");
 }
@@ -35,19 +32,13 @@ pub struct Post;
 
 impl Entity for Post {
     type Model = PostModel;
-
     const TABLE: &'static str = "posts";
-
-    const COLUMNS: &'static [Column] = &[
-        Column::new("id"),
-        Column::new("title"),
-    ];
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("title")];
 }
 
 impl Post {
     #[allow(non_upper_case_globals)]
     pub const id: Field<Self, i32> = Field::new("id");
-
     #[allow(non_upper_case_globals)]
     pub const title: Field<Self, String> = Field::new("title");
 }
@@ -58,16 +49,10 @@ async fn main() -> Result<(), sqlx::Error> {
 
     let users = User::find()
         .where_(User::name.eq("Fakhir"))
-        .take(20)
         .all(&db)
         .await?;
 
-    let posts = Post::find()
-        .where_(Post::title.eq("Rust"))
-        .take(10)
-        .all(&db)
-        .await?;
-
+    let posts = Post::find().where_(Post::title.eq("Rust")).all(&db).await?;
     // User::find()
     // .where_(Post::title.eq("Rust"));
 

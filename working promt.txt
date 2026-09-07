@@ -1,46 +1,6 @@
-
-
-
-Is phase ka pehla step
-
-Main pehle Entity trait ko production-oriented design mein redesign karunga, bina abhi folder structure change kiye.
-
-Phir User ko us naye contract par migrate karenge aur second entity, e.g. Post, bana kar prove karenge ke runtime genuinely generic hai.
-
-Yani abhi target simple hai:
-
-“RustORM runtime ko User-specific se genuinely Entity-generic banana.”
-
-Uske baad hi next abstraction par jayenge.
-
-HOUR 1
-Entity + Model architecture
-        ↓
-HOUR 2
-Generic Query<E>::all()
-        ↓
-HOUR 3
-Post entity + PostgreSQL test
-        ↓
-HOUR 4
-Generic fields / conditions
-        ↓
-HOUR 5
-Multiple conditions
-        ↓
-HOUR 6
-Query builder robustness
-        ↓
-HOUR 7
-Runtime integration tests
-        ↓
-HOUR 8
-Clean-up + architecture review
-
-
 //////////////////////////////////////////////////////////////////////////////
 ////////////////***     Current working state     ***///////////////////////// ye working aagy ja kr krni hy ok
-//////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////// don't remove this
 
 Haan bhai — **ab jo code tumne diya hai usko boundary level par dobara carefully inspect kiya**, aur ab picture kaafi clear hai.
 
@@ -478,6 +438,318 @@ Tumhara current generic boundary **conceptually sound enough hai to move forward
 Ek aur important correction from earlier: **`Column` ko abhi generic `Column<E, T>` banane ki zarurat nahi.** `Field<E,T>` already carries the compile-time entity/type information where expressions need it. `Column` ka current role SQL column metadata hai. Usko unnecessarily generic karna abstraction ko tighter nahi, balki more coupled bana sakta hai.
 
 **So: boundary checkpoint passed.** 🟢
+
+////////////////////////////////////////////////////////////////////////////// ^|
+////////////////***     Current working state     ***///////////////////////// ye working aagy ja kr krni hy ok
+////////////////////////////////////////////////////////////////////////////// don't remove this
+
+
+
+
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+Haan bhai — **ab tak hum sahi direction mein hain**, aur ab sabse important decision ye hai ke hum query features ko random `Query<E>` mein chipkana start na kar dein.
+
+Meri recommendation:
+
+### Abhi `lib.rs` ko split mat karo
+
+Pehle **query architecture/AST** banate hain. Kyun ke agar abhi `lib.rs` ko modules mein split kar diya aur phir query architecture change hua, to unnecessary refactoring hogi.
+
+Aur tumhari 12-feature list ko bhi ek saath implement nahi karna.
+
+## Agla phase: Query AST
+
+Abhi hamara flow roughly:
+
+```text
+User::find()
+    ↓
+Query<User>
+    ↓
+build_sql()
+    ↓
+SQL string
+    ↓
+SQLx
+```
+
+Isko production ORM ke liye gradually:
+
+```text
+User::find()
+    ↓
+Query<User>
+    ↓
+Query AST
+    ↓
+SQL Compiler
+    ↓
+SQL + Bind Values
+    ↓
+PostgreSQL / SQLx
+```
+
+karna chahiye.
+
+### Iska faida
+
+Phir:
+
+```text
+WHERE
+GROUP BY
+HAVING
+ORDER BY
+LIMIT
+OFFSET
+JOIN
+DISTINCT
+UNION
+CTE
+FOR UPDATE
+Subquery
+```
+
+sab `Query` ke andar manually SQL strings concatenate karne ke bajaye **AST ke different nodes** banenge.
+
+---
+
+# Lekin pehla step kya hoga?
+
+Main is order mein jaunga:
+
+### Phase 1 — Current foundation
+
+Already done:
+
+* `Entity`
+* `Field<E, T>`
+* `Condition<E>`
+* `Query<E>`
+* typed values
+* generic entity boundary
+
+### Phase 2 — Query AST foundation ⭐
+
+Pehle sirf basic structure:
+
+```text
+Query
+ ├── Select
+ ├── From
+ ├── Where
+ ├── OrderBy
+ ├── Limit
+ └── Offset
+```
+
+Lekin implementation mein **sab features ek saath nahi**.
+
+Sabse pehle:
+
+```text
+Query
+   ↓
+Select
+   ↓
+From
+   ↓
+Where
+```
+
+Aur existing test:
+
+```rust
+User::find()
+    .where_(User::name.eq("Fakhir"))
+```
+
+same tarah work kare.
+
+---
+
+# Phir features ka order
+
+Main tumhari list ko is order mein implement karunga:
+
+```text
+1. WHERE          ← already primitive form mein hai
+2. ORDER BY
+3. LIMIT          ← already hai
+4. OFFSET
+5. DISTINCT
+6. GROUP BY
+7. HAVING
+8. JOIN
+9. Subquery
+10. CTE
+11. UNION
+12. FOR UPDATE
+```
+
+### Kyun?
+
+Because dependencies naturally isi tarah build hoti hain.
+
+For example:
+
+```text
+GROUP BY
+    ↓
+HAVING
+```
+
+`HAVING` ko meaningful banane ke liye grouping chahiye.
+
+Aur:
+
+```text
+Subquery
+    ↓
+CTE
+    ↓
+UNION
+```
+
+in sab ke liye query ko **first-class SQL expression/query** ki tarah represent karna useful hoga.
+
+---
+
+# Aur ek important baat
+
+Abhi `Query<E>` mein:
+
+```rust
+condition: Option<Condition<E>>,
+limit: Option<i64>,
+```
+
+hai.
+
+Agar hum seedha:
+
+```rust
+group_by: ...
+having: ...
+order_by: ...
+joins: ...
+distinct: ...
+union: ...
+cte: ...
+```
+
+add karte chale gaye to `Query<E>` ek **giant struct** ban jayega.
+
+Ye nahi karna.
+
+Instead eventually kuch is type ka conceptual model chahiye:
+
+```text
+Query<E>
+   │
+   └── SelectStatement
+          ├── projections
+          ├── from
+          ├── joins
+          ├── where_clause
+          ├── group_by
+          ├── having
+          ├── order_by
+          ├── limit
+          ├── offset
+          └── locking
+```
+
+Aur expressions alag:
+
+```text
+Expression
+ ├── Column
+ ├── Value
+ ├── Binary
+ ├── Function
+ ├── Subquery
+ └── ...
+```
+
+Ye architecture future features ko manageable banayega.
+
+---
+
+# `lib.rs` kab split karenge?
+
+**Query AST foundation stable hone ke baad.**
+
+Phir:
+
+```text
+src/
+├── lib.rs
+│
+├── entity/
+│   └── mod.rs
+│
+├── field/
+│   └── mod.rs
+│
+├── query/
+│   ├── mod.rs
+│   ├── query.rs
+│   ├── expression.rs
+│   ├── condition.rs
+│   └── statement.rs
+│
+├── value/
+│   └── mod.rs
+│
+├── sql/
+│   ├── mod.rs
+│   └── postgres.rs
+│
+└── executor/
+    └── mod.rs
+```
+
+**Lekin abhi nahi.**
+
+Abhi `lib.rs` ka faida ye hai ke hum architecture ko rapidly change/test kar sakte hain.
+
+---
+
+## So next exact task
+
+Mere hisaab se ab hum **`Query AST` ka first version** banayen.
+
+Sirf:
+
+```text
+SELECT
+FROM
+WHERE
+```
+
+Aur existing:
+
+```rust
+User::find()
+    .where_(User::name.eq("Fakhir"))
+```
+
+ko AST ke through SQL mein compile karwayen.
+
+**ORDER BY/LIMIT/OFFSET bhi abhi add nahi karenge.**
+
+Pehle ye foundation solid karte hain. Uske baad ek-ek feature add karna kaafi clean ho jayega.
+
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
+|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
+
+now current working on query AST
+
 
 
 

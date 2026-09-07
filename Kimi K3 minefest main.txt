@@ -997,20 +997,18 @@ impl User {
 /////////////////
 ///wokring on ///
 /////////////////
-1. WHERE
-2. GROUP BY
-3. HAVING
-4. ORDER BY
-5. LIMIT
-6. OFFSET
-7. JOIN (INNER, LEFT, RIGHT)
-8. DISTINCT
-9. UNION
-10. WITH (CTE)
-11. FOR UPDATE
-12. Subquery (nested SELECT)
-
-
+1. WHERE          ← already primitive form mein hai
+2. ORDER BY
+3. LIMIT          ← already hai
+4. OFFSET
+5. DISTINCT
+6. GROUP BY
+7. HAVING
+8. JOIN
+9. Subquery
+10. CTE
+11. UNION
+12. FOR UPDATE
 
 
 /////////////////
