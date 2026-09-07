@@ -1004,6 +1004,7 @@ impl User {
 5. DISTINCT done
 6. GROUP BY done
 7. HAVING done
+after sepration in modules
 8. JOIN
 9. Subquery
 10. CTE
