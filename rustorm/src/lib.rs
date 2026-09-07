@@ -104,6 +104,16 @@ impl<E, T> Field<E, T> {
             _entity: PhantomData,
         }
     }
+
+    pub fn avg(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Function {
+                function: AggregateFunction::Avg,
+                expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
 }
 
 //
@@ -275,6 +285,7 @@ enum Expression {
 enum AggregateFunction {
     Count,
     Sum,
+    Avg,
 }
 impl<E> Condition<E> {
     pub fn and(self, other: Condition<E>) -> Condition<E> {
@@ -379,6 +390,10 @@ fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> 
 
                 AggregateFunction::Sum => {
                     format!("SUM({})", expression_sql)
+                }
+
+                AggregateFunction::Avg => {
+                    format!("AVG({})", expression_sql)
                 }
             }
         }
@@ -1005,6 +1020,48 @@ mod tests {
         assert_eq!(
             query.build_sql(),
             "SELECT name, SUM(id) FROM users GROUP BY name HAVING SUM(id) > $1"
+        );
+    }
+    #[test]
+    fn avg_select_works() {
+        let query = TestUser::find().select(TestUser::id.avg());
+
+        assert_eq!(query.build_sql(), "SELECT AVG(id) FROM users");
+    }
+    #[test]
+    fn avg_with_where_works() {
+        let query = TestUser::find()
+            .where_(TestUser::name.eq("Fakhir"))
+            .select(TestUser::id.avg());
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT AVG(id) FROM users WHERE name = $1"
+        );
+    }
+    #[test]
+    fn avg_with_group_by_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.avg())
+            .group_by(TestUser::name.column());
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, AVG(id) FROM users GROUP BY name"
+        );
+    }
+    #[test]
+    fn avg_with_group_by_and_having_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.avg())
+            .group_by(TestUser::name.column())
+            .having(TestUser::id.avg().gt(2));
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT name, AVG(id) FROM users GROUP BY name HAVING AVG(id) > $1"
         );
     }
 }

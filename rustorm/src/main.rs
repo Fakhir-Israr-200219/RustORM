@@ -1,5 +1,6 @@
 use rustorm::{Column, Entity, Field};
 use sqlx::PgPool;
+use sqlx::types::BigDecimal;
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserModel {
@@ -21,6 +22,12 @@ struct UserSum {
     name: String,
     #[allow(dead_code)]
     sum: i64,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct UserAvg {
+    #[allow(dead_code)]
+    avg: BigDecimal,
 }
 
 pub struct User;
@@ -99,6 +106,12 @@ async fn main() -> Result<(), sqlx::Error> {
         .fetch_all::<UserSum>(&db)
         .await?;
 
+    let user_avg = User::find()
+        .select(User::id.avg())
+        .fetch_all::<UserAvg>(&db)
+        .await?;
+
+    println!("User ID average: {:?}", user_avg);
     println!("Grouped sums: {grouped_sums:#?}");
     println!("User ID sum with where_: {user_id_sum_with_where}");
     println!("User ID sum: {user_id_sum}");
