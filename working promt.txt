@@ -1,784 +1,96 @@
-//////////////////////////////////////////////////////////////////////////////
-////////////////***     Current working state     ***///////////////////////// ye working aagy ja kr krni hy ok
-////////////////////////////////////////////////////////////////////////////// don't remove this
-
-Haan bhai — **ab jo code tumne diya hai usko boundary level par dobara carefully inspect kiya**, aur ab picture kaafi clear hai.
-
-### Short verdict
-
-**Entity generic boundary mein ab koi major conceptual leak nahi bacha.** 🟢
-
-Tumne jo 3 major problems thi unko correctly fix kar diya:
-
-```text
-Entity::columns()     → Column metadata       ✅
-Condition             → Condition<E>           ✅
-Field<T>              → Field<E, T>            ✅
-Value                 → private BindValue      ✅
-Query<E>              → entity-safe            ✅
-```
-
-Lekin **2 conceptual issues abhi bache hain**. Main inko abhi fix karne ki recommendation nahi dunga bina design discuss kiye, kyunki dono next architectural layer se related hain.
-
----
-
-# 1. `Field<E, T>` aur `Entity::COLUMNS` ke beech metadata duplication 🟡
-
-Ab generated entity mein:
-
-```rust
-const COLUMNS: &'static [Column] = &[
-    Column::new("id"),
-    Column::new("name"),
-];
-```
-
-aur separately:
-
-```rust
-pub const id: Field<Self, i32> = Field::new("id");
-
-pub const name: Field<Self, String> = Field::new("name");
-```
-
-Same information do jagah hai:
-
-```text
-"id"
-"id"
-```
-
-aur:
-
-```text
-"name"
-"name"
-```
-
-Yani theoretically generated code ye kar sakta hai:
-
-```rust
-COLUMNS = ["id", "email"]
-
-Field = ["id", "name"]
-```
-
-aur compiler is inconsistency ko nahi pakdega.
-
-Ye **generic boundary leak nahi**, balki **metadata consistency problem** hai.
-
-Aur important point:
-
-> Isko abhi `Entity` mein aur complicated generic machinery daal kar solve nahi karna chahiye.
-
-Eventually code generation layer naturally dono ko same schema AST se generate karegi, to generator consistency enforce karega.
-
----
-
-# 2. `Column` abhi sirf name rakhta hai 🟡
-
-Current:
-
-```rust
-pub struct Column {
-    name: &'static str,
-}
-```
-
-Aur:
-
-```rust
-Field<E, T>
-```
-
-ke paas type information compile-time par hai.
-
-Lekin:
-
-```rust
-Column
-```
-
-ko runtime par nahi pata:
-
-```text
-id → i32
-name → String
-```
-
-Iska matlab:
-
-```text
-Field<User, i32>
-```
-
-strongly typed hai.
-
-Lekin:
-
-```text
-Column("id")
-```
-
-weak metadata hai.
-
-Again, **generic boundary leak nahi hai**.
-
-Ye metadata model ki limitation hai.
-
----
-
-# 3. `BindValue` ka type erasure ab acceptable hai 🟢
-
-Ye point specifically clear karna important hai.
-
-Ab:
-
-```rust
-enum BindValue {
-    String(String),
-    I64(i64),
-}
-```
-
-private hai.
-
-Aur type safety pehle enforce ho chuki:
-
-```rust
-Field<User, String>
-       ↓
-Condition<User>
-```
-
-ya:
-
-```rust
-Field<User, i32>
-       ↓
-Condition<User>
-```
-
-So:
-
-```text
-User::name.eq(123)
-```
-
-compile nahi karega.
-
-Aur:
-
-```text
-User::id.eq("Fakhir")
-```
-
-compile nahi karega.
-
-Isliye execution layer mein:
-
-```text
-Condition<User>
-      ↓
-BindValue
-```
-
-type erasure **ab conceptual problem nahi**.
-
-Ye exactly woh jagah hai jahan runtime ko eventually heterogeneous SQL parameters handle karne padenge.
-
----
-
-# 4. `Condition<E>` ne cross-entity leak successfully close kar diya 🟢🔥
-
-Ye sabse important test hai.
-
-Tumhara commented code:
-
-```rust
-// User::find()
-//     .where_(Post::title.eq("Rust"));
-```
-
-ab intentionally compile nahi hona chahiye.
-
-Because:
-
-```text
-Post::title
-     ↓
-Field<Post, String>
-     ↓
-Condition<Post>
-```
-
-while:
-
-```text
-User::find()
-     ↓
-Query<User>
-```
-
-and:
-
-```text
-where_(Condition<User>)
-```
-
-expects `Condition<User>`.
-
-Therefore:
-
-```text
-Condition<Post>
-        ≠
-Condition<User>
-```
-
-**Excellent.**
-
-Ye genuinely type-safe ORM boundary hai.
-
----
-
-# 5. `Query<E>` itself clean hai 🟢
-
-Current:
-
-```rust
-pub struct Query<E> {
-    condition: Option<Condition<E>>,
-    limit: Option<i64>,
-    _entity: PhantomData<E>,
-}
-```
-
-Yahan entity association consistent hai:
-
-```text
-Query<E>
- ├── Condition<E>
- └── E::Model
-```
-
-That is exactly what we want.
-
----
-
-# 6. SQLx/Postgres boundary 🟡 — but NOT an entity-boundary leak
-
-Current:
-
-```rust
-pub async fn all(
-    self,
-    db: &sqlx::PgPool,
-) -> Result<Vec<E::Model>, sqlx::Error>
-```
-
-and:
-
-```rust
-sqlx::FromRow
-sqlx::PgRow
-sqlx::Error
-```
-
-Ye clearly RustORM ko SQLx/Postgres se couple karta hai.
-
-But notice:
-
-```text
-User
-Post
-Product
-Order
-...
-   ↓
-Entity
-   ↓
-Query<E>
-   ↓
-SQLx/Postgres
-```
-
-`User`/`Post` ki dependency SQLx par **application model implementation** mein hai:
-
-```rust
-#[derive(sqlx::FromRow)]
-```
-
-while runtime execution also directly SQLx use karta hai.
-
-So final architecture ke perspective se ye **abhi intentionally incomplete executor boundary** hai.
-
-But if our current question is:
-
-> "Kya runtime generated entities ko jaanta hai?"
-
-Answer:
-
-**No.**
-
-Therefore generic entity boundary is clean.
-
----
-
-# 7. Ek subtle thing: `Entity` itself still doesn't require `Model` to be connected to columns
-
-You have:
-
-```rust
-type Model;
-```
-
-and:
-
-```rust
-const COLUMNS: &'static [Column];
-```
-
-but Rust compiler doesn't know:
-
-```text
-COLUMNS
-    ↕
-Model fields
-```
-
-match karte hain.
-
-For example theoretically:
-
-```rust
-struct UserModel {
-    id: i32,
-    name: String,
-}
-```
-
-while:
-
-```rust
-COLUMNS = [
-    Column::new("foo"),
-    Column::new("bar"),
-];
-```
-
-could compile.
-
-Again:
-
-**not a generic-boundary leak.**
-
-This is the job of generated code/schema validation/runtime mapping layer.
-
----
-
-# Final architecture right now
-
-Main isko ab roughly **green** consider karunga:
-
-```text
-                  RustORM Runtime
-                       │
-          ┌────────────┼────────────┐
-          │            │            │
-       Entity       Field<E,T>   Query<E>
-          │            │            │
-          │            ↓            ↓
-          │       Condition<E>      │
-          │            │            │
-          │            ↓            │
-          │       BindValue         │
-          │                         │
-          └───────────┬─────────────┘
-                      ↓
-                  SQL generation
-                      ↓
-                 SQLx/Postgres
-```
-
-Application side:
-
-```text
-User ────────┐
-Post ────────┤
-Product ─────┤
-Order ───────┘
-      │
-      ↓
-   Entity
-```
-
-**Runtime ko `User`, `Post`, `Product`, `Order` ke existence ka knowledge nahi.**
-
----
-
-## Mere hisaab se abhi sirf ye warnings hain
-
-| Issue                               | Status                               |
-| ----------------------------------- | ------------------------------------ |
-| `Field<T>` lacks entity identity    | ✅ fixed                              |
-| Condition can cross entities        | ✅ fixed                              |
-| Public `Value` leaks implementation | ✅ fixed                              |
-| `columns()` temporary lifetime      | ✅ fixed                              |
-| Column abstraction too primitive    | 🟡 future metadata                   |
-| COLUMNS/Field metadata duplication  | 🟡 generator concern                 |
-| Model ↔ columns consistency         | 🟡 schema/codegen concern            |
-| SQLx/Postgres exposed               | 🟡 executor boundary, separate phase |
-| Runtime knows `User`/`Post`         | 🟢 clean                             |
-
-### Isliye **ab main `Entity`, `Field`, `Condition`, `Query` ko aur change nahi karunga.**
-
-Tumhara current generic boundary **conceptually sound enough hai to move forward**.
-
-Ek aur important correction from earlier: **`Column` ko abhi generic `Column<E, T>` banane ki zarurat nahi.** `Field<E,T>` already carries the compile-time entity/type information where expressions need it. `Column` ka current role SQL column metadata hai. Usko unnecessarily generic karna abstraction ko tighter nahi, balki more coupled bana sakta hai.
-
-**So: boundary checkpoint passed.** 🟢
-
-////////////////////////////////////////////////////////////////////////////// ^|
-////////////////***     Current working state     ***///////////////////////// ye working aagy ja kr krni hy ok
-////////////////////////////////////////////////////////////////////////////// don't remove this
-
-
-
-
 |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 ||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
 |||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
 
-Haan bhai — **ab tak hum sahi direction mein hain**, aur ab sabse important decision ye hai ke hum query features ko random `Query<E>` mein chipkana start na kar dein.
-
-Meri recommendation:
-
-### Abhi `lib.rs` ko split mat karo
-
-Pehle **query architecture/AST** banate hain. Kyun ke agar abhi `lib.rs` ko modules mein split kar diya aur phir query architecture change hua, to unnecessary refactoring hogi.
-
-Aur tumhari 12-feature list ko bhi ek saath implement nahi karna.
-
-## Agla phase: Query AST
-
-Abhi hamara flow roughly:
-
-```text
-User::find()
-    ↓
-Query<User>
-    ↓
-build_sql()
-    ↓
-SQL string
-    ↓
-SQLx
-```
-
-Isko production ORM ke liye gradually:
-
-```text
-User::find()
-    ↓
-Query<User>
-    ↓
-Query AST
-    ↓
-SQL Compiler
-    ↓
-SQL + Bind Values
-    ↓
-PostgreSQL / SQLx
-```
-
-karna chahiye.
-
-### Iska faida
-
-Phir:
-
-```text
-WHERE
-GROUP BY
-HAVING
-ORDER BY
-LIMIT
-OFFSET
-JOIN
-DISTINCT
-UNION
-CTE
-FOR UPDATE
-Subquery
-```
-
-sab `Query` ke andar manually SQL strings concatenate karne ke bajaye **AST ke different nodes** banenge.
-
----
-
-# Lekin pehla step kya hoga?
-
-Main is order mein jaunga:
-
-### Phase 1 — Current foundation
-
-Already done:
-
-* `Entity`
-* `Field<E, T>`
-* `Condition<E>`
-* `Query<E>`
-* typed values
-* generic entity boundary
-
-### Phase 2 — Query AST foundation ⭐
-
-Pehle sirf basic structure:
-
-```text
-Query
- ├── Select
- ├── From
- ├── Where
- ├── OrderBy
- ├── Limit
- └── Offset
-```
-
-Lekin implementation mein **sab features ek saath nahi**.
-
-Sabse pehle:
-
-```text
-Query
-   ↓
-Select
-   ↓
-From
-   ↓
-Where
-```
-
-Aur existing test:
-
-```rust
-User::find()
-    .where_(User::name.eq("Fakhir"))
-```
-
-same tarah work kare.
-
----
-
-# Phir features ka order
-
-Main tumhari list ko is order mein implement karunga:
-
-```text
-1. WHERE          ← already primitive form mein hai
-2. ORDER BY
-3. LIMIT          ← already hai
-4. OFFSET
-5. DISTINCT
-6. GROUP BY
-7. HAVING
-8. JOIN
-9. Subquery
-10. CTE
-11. UNION
-12. FOR UPDATE
-```
-
-### Kyun?
-
-Because dependencies naturally isi tarah build hoti hain.
-
-For example:
-
-```text
-GROUP BY
-    ↓
-HAVING
-```
-
-`HAVING` ko meaningful banane ke liye grouping chahiye.
-
-Aur:
-
-```text
-Subquery
-    ↓
-CTE
-    ↓
-UNION
-```
-
-in sab ke liye query ko **first-class SQL expression/query** ki tarah represent karna useful hoga.
-
----
-
-# Aur ek important baat
-
-Abhi `Query<E>` mein:
-
-```rust
-condition: Option<Condition<E>>,
-limit: Option<i64>,
-```
-
-hai.
-
-Agar hum seedha:
-
-```rust
-group_by: ...
-having: ...
-order_by: ...
-joins: ...
-distinct: ...
-union: ...
-cte: ...
-```
-
-add karte chale gaye to `Query<E>` ek **giant struct** ban jayega.
-
-Ye nahi karna.
-
-Instead eventually kuch is type ka conceptual model chahiye:
-
-```text
-Query<E>
-   │
-   └── SelectStatement
-          ├── projections
-          ├── from
-          ├── joins
-          ├── where_clause
-          ├── group_by
-          ├── having
-          ├── order_by
-          ├── limit
-          ├── offset
-          └── locking
-```
-
-Aur expressions alag:
-
-```text
-Expression
- ├── Column
- ├── Value
- ├── Binary
- ├── Function
- ├── Subquery
- └── ...
-```
-
-Ye architecture future features ko manageable banayega.
-
----
-
-# `lib.rs` kab split karenge?
-
-**Query AST foundation stable hone ke baad.**
-
-Phir:
-
-```text
 src/
-├── lib.rs
 │
 ├── entity/
 │   └── mod.rs
+│       Entity
+│       Column
 │
 ├── field/
 │   └── mod.rs
+│       Field
 │
 ├── query/
 │   ├── mod.rs
 │   ├── query.rs
+│   │   Query
+│   │
 │   ├── expression.rs
+│   │   Expression
+│   │   BinaryOperator
+│   │   AggregateFunction
+│   │
 │   ├── condition.rs
+│   │   Condition
+│   │
 │   └── statement.rs
+│       SelectStatement
+│       OrderBy
+│       OrderDirection
+│       SelectItem
 │
 ├── value/
 │   └── mod.rs
+│       BindValue
 │
 ├── sql/
 │   ├── mod.rs
 │   └── postgres.rs
+│       SQL compiler
 │
-└── executor/
-    └── mod.rs
-```
+├── executor/
+│   └── mod.rs
+│       all()
+│       count()
+│       fetch_all()
+│
+└── lib.rs
+    public API / re-exports
 
-**Lekin abhi nahi.**
 
-Abhi `lib.rs` ka faida ye hai ke hum architecture ko rapidly change/test kar sakte hain.
 
----
+| Current code           | New location          |
+| ---------------------- | --------------------- |
+| `Entity`               | `entity/mod.rs`       |
+| `Column`               | `entity/mod.rs`       |
+| `Field`                | `field/mod.rs`        |
+| `Condition`            | `query/condition.rs`  |
+| `Expression`           | `query/expression.rs` |
+| `BinaryOperator`       | `query/expression.rs` |
+| `AggregateFunction`    | `query/expression.rs` |
+| `SelectStatement`      | `query/statement.rs`  |
+| `OrderBy`              | `query/statement.rs`  |
+| `OrderDirection`       | `query/statement.rs`  |
+| `SelectItem`           | `query/statement.rs`  |
+| `Query`                | `query/query.rs`      |
+| `BindValue`            | `value/mod.rs`        |
+| `compile_expression()` | `sql/postgres.rs`     |
+| `build_sql()`          | `sql/postgres.rs`     |
+| `all()`                | `executor/mod.rs`     |
+| `count()`              | `executor/mod.rs`     |
+| `fetch_all()`          | `executor/mod.rs`     |
 
-## So next exact task
 
-Mere hisaab se ab hum **`Query AST` ka first version** banayen.
 
-Sirf:
 
-```text
-SELECT
-FROM
-WHERE
-```
 
-Aur existing:
 
-```rust
-User::find()
-    .where_(User::name.eq("Fakhir"))
-```
+    // 1. PhantomData ke bina Field<T> kyun nahi ban sakta?
+    
+    // 2. User::name.eq("Fakhir") mein "Fakhir" kis type mein convert hota hai?
+    
+    // 3. Agar main User::find().where_(Post::title.eq("Rust")) likhu,
+    //    to exactly kaunsa trait bound fail hoga? Error kya hogi?
+    
+    // 4. Query build hote waqt, SQL string mein column names kaun decide karta hai?
+    //    Entity trait se ya Field se?
+    
+    // 5. BindValue::I64(5) SQL mein "$1" ban jata hai, lekin database tak 
+    //    pahunchte waqt value kaun inject karta hai? SQLx ya tumhara code?
 
-ko AST ke through SQL mein compile karwayen.
-
-**ORDER BY/LIMIT/OFFSET bhi abhi add nahi karenge.**
-
-Pehle ye foundation solid karte hain. Uske baad ek-ek feature add karna kaafi clean ho jayega.
-
-|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
-|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
-now current working on query AST ^|-- done
-now current working is Expression
-Next logical step AST ke andar expression/condition representation ko proper banana hai. ^|-- done
-Expression ^|-- done
-├── Column ^|-- done
-├── Value ^|-- done
-├── Binary ^|-- done
-│   ├── Eq ^|-- done
-│   ├── Ne ^|-- done
-│   ├── Gt ^|-- done
-│   ├── Lt ^|-- done
-│   └── ... ^|-- done
-└── ...  ^|-- done
-working on AND or OR operator   ^|-- done
-working on Order by     ^|-- done
-working on LIMIT ^|-- done
-working on offset ^|-- done
-working on DISTINCT  ^|-- done
-working on group by ^|-- done
-working on Haveing ^|-- done
-working on aggregate ^|-- done
-✅ COUNT()
-✅ COUNT + WHERE
-✅ GROUP BY
-✅ HAVING
-✅ COUNT + GROUP BY + HAVING
-✅ bind values
-✅ AST compilation
-✅ real PostgreSQL execution
-✅ generic aggregate result fetch_all::<UserCount>()
-working on aggregate SUM ^|-- done
 
 Lekin ek important distinction: abhi humne unit-level AST/compiler test kiya hai. Abhi actual PostgreSQL par nested AND/OR query execute karke verify nahi kiya. Wo next logical verification hoga.
 Yahan ek interesting architectural point bhi hai: LIMIT bind parameter bhi ho sakta hai (LIMIT $2), lekin abhi hum simple literal LIMIT 20 rakhenge. Pehle query AST ko stable karte hain.
