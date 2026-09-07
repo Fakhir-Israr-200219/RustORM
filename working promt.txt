@@ -767,8 +767,8 @@ working on LIMIT ^|-- done
 working on offset ^|-- done
 working on DISTINCT  ^|-- done
 working on group by ^|-- done
-working on Haveing
-abhi aggregate functions (COUNT, SUM, etc.) implement nahi karenge
+working on Haveing ^|-- done
+working on aggregate
 
 
 

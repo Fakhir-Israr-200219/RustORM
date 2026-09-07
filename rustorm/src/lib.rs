@@ -187,6 +187,7 @@ pub struct SelectStatement {
     offset: Option<u64>,
     distinct: bool,
     group_by: Vec<Column>,
+    having: Option<Expression>,
 }
 enum OrderDirection {
     Asc,
@@ -322,6 +323,7 @@ where
                 offset: None,
                 distinct: false,
                 group_by: Vec::new(),
+                having: None,
             },
             _entity: PhantomData,
         }
@@ -354,6 +356,11 @@ where
 
     pub fn group_by(mut self, column: Column) -> Self {
         self.statement.group_by.push(column);
+        self
+    }
+
+    pub fn having(mut self, condition: Condition<E>) -> Self {
+        self.statement.having = Some(condition.expression);
         self
     }
 }
@@ -401,7 +408,10 @@ where
 
             sql.push_str(&columns);
         }
-
+        if let Some(condition) = &self.statement.having {
+            sql.push_str(" HAVING ");
+            sql.push_str(&compile_expression(condition, &mut next_placeholder));
+        }
         if let Some(order_by) = &self.statement.order_by {
             sql.push_str(" ORDER BY ");
             sql.push_str(order_by.column.name());
@@ -442,6 +452,25 @@ where
             let mut values = Vec::new();
 
             collect_bind_values(expression, &mut values);
+
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
+                    }
+                }
+            }
+        }
+
+        if let Some(expression) = &self.statement.having {
+            let mut values = Vec::new();
+
+            collect_bind_values(expression, &mut values);
+
             for value in values {
                 match value {
                     BindValue::String(value) => {
@@ -667,5 +696,59 @@ mod tests {
             sql,
             "SELECT id, name FROM users GROUP BY name ORDER BY name ASC LIMIT 20 OFFSET 40"
         );
+    }
+    #[test]
+    fn having_works() {
+        let query = TestUser::find()
+            .group_by(TestUser::name.column)
+            .having(TestUser::id.gt(10));
+        let sql = query.build_sql();
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users GROUP BY name HAVING id > $1"
+        );
+    }
+    #[test]
+    fn where_and_having_work_together() {
+        let query = TestUser::find()
+            .where_(TestUser::id.gt(5))
+            .group_by(TestUser::name.column)
+            .having(TestUser::id.gt(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users WHERE id > $1 GROUP BY name HAVING id > $2"
+        );
+    }
+    #[test]
+    fn where_and_having_collect_bind_values_in_order() {
+        let query = TestUser::find()
+            .where_(TestUser::id.gt(5))
+            .group_by(TestUser::name.column)
+            .having(TestUser::id.gt(10));
+
+        let mut values = Vec::new();
+
+        if let Some(expression) = &query.statement.where_clause {
+            collect_bind_values(expression, &mut values);
+        }
+
+        if let Some(expression) = &query.statement.having {
+            collect_bind_values(expression, &mut values);
+        }
+
+        assert_eq!(values.len(), 2);
+
+        match &values[0] {
+            BindValue::I64(value) => assert_eq!(*value, 5),
+            _ => panic!("expected first bind value to be i64"),
+        }
+
+        match &values[1] {
+            BindValue::I64(value) => assert_eq!(*value, 10),
+            _ => panic!("expected second bind value to be i64"),
+        }
     }
 }
