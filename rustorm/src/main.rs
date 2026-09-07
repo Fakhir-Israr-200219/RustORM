@@ -1,4 +1,4 @@
-use rustorm::{Entity, Field};
+use rustorm::{Column, Entity, Field};
 use sqlx::PgPool;
 
 #[derive(Debug, sqlx::FromRow)]
@@ -14,19 +14,16 @@ impl Entity for User {
 
     const TABLE: &'static str = "users";
 
-    fn columns() -> &'static [&'static str] {
-        &["id", "name"]
-    }
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl User {
     #[allow(non_upper_case_globals)]
-    pub const id: Field<i32> = Field::new("id");
+    pub const id: Field<Self, i32> = Field::new("id");
 
     #[allow(non_upper_case_globals)]
-    pub const name: Field<String> = Field::new("name");
+    pub const name: Field<Self, String> = Field::new("name");
 }
-
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct PostModel {
@@ -41,26 +38,23 @@ impl Entity for Post {
 
     const TABLE: &'static str = "posts";
 
-    fn columns() -> &'static [&'static str] {
-        &["id", "title"]
-    }
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("title"),
+    ];
 }
 
 impl Post {
     #[allow(non_upper_case_globals)]
-    pub const id: Field<i32> = Field::new("id");
+    pub const id: Field<Self, i32> = Field::new("id");
 
     #[allow(non_upper_case_globals)]
-    pub const title: Field<String> = Field::new("title");
+    pub const title: Field<Self, String> = Field::new("title");
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let db = PgPool::connect(
-        "postgres://postgres:admin@localhost/rustorm"
-    )
-    .await?;
+    let db = PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
 
     let users = User::find()
         .where_(User::name.eq("Fakhir"))
@@ -73,6 +67,9 @@ async fn main() -> Result<(), sqlx::Error> {
         .take(10)
         .all(&db)
         .await?;
+
+    // User::find()
+    // .where_(Post::title.eq("Rust"));
 
     println!("Users: {users:#?}");
     println!("Posts: {posts:#?}");

@@ -1,11 +1,33 @@
 use std::marker::PhantomData;
 
+//
+// Entity
+//
+
+// pub trait Entity {
+//     type Model;
+
+//     const TABLE: &'static str;
+
+//     fn columns() -> &'static [Column];
+
+//     fn find() -> Query<Self>
+//     where
+//         Self: Sized,
+//     {
+//         Query::new()
+//     }
+// }
+
 pub trait Entity {
     type Model;
 
     const TABLE: &'static str;
+    const COLUMNS: &'static [Column];
 
-    fn columns() -> &'static [&'static str];
+    fn columns() -> &'static [Column] {
+        Self::COLUMNS
+    }
 
     fn find() -> Query<Self>
     where
@@ -14,40 +36,103 @@ pub trait Entity {
         Query::new()
     }
 }
-pub struct Field<T> {
+
+//
+// Column metadata
+//
+
+#[derive(Debug, Clone, Copy)]
+pub struct Column {
     name: &'static str,
-    _marker: PhantomData<T>,
 }
 
-impl<T> Field<T> {
+impl Column {
     pub const fn new(name: &'static str) -> Self {
-        Self {
-            name,
-            _marker: PhantomData,
-        }
+        Self { name }
+    }
+
+    pub const fn name(&self) -> &'static str {
+        self.name
     }
 }
-pub enum Value {
+
+//
+// Field
+//
+
+pub struct Field<E, T> {
+    column: Column,
+    _entity: PhantomData<E>,
+    _type: PhantomData<T>,
+}
+
+impl<E, T> Field<E, T> {
+    pub const fn new(name: &'static str) -> Self {
+        Self {
+            column: Column::new(name),
+            _entity: PhantomData,
+            _type: PhantomData,
+        }
+    }
+
+    pub const fn name(&self) -> &'static str {
+        self.column.name()
+    }
+}
+
+//
+// Typed condition
+//
+
+pub struct Condition<E> {
+    column: Column,
+    value: BindValue,
+    _entity: PhantomData<E>,
+}
+
+//
+// Internal SQL bind representation
+//
+
+enum BindValue {
     String(String),
     I64(i64),
 }
 
-pub struct Condition {
-    column: &'static str,
-    value: Value,
-}
+//
+// String field expressions
+//
 
-impl Field<String> {
-    pub fn eq(&self, value: impl Into<String>) -> Condition {
+impl<E> Field<E, String> {
+    pub fn eq(&self, value: impl Into<String>) -> Condition<E> {
         Condition {
-            column: self.name,
-            value: Value::String(value.into()),
+            column: self.column,
+            value: BindValue::String(value.into()),
+            _entity: PhantomData,
         }
     }
 }
 
+//
+// Integer field expressions
+//
+
+impl<E> Field<E, i32> {
+    pub fn eq(&self, value: i32) -> Condition<E> {
+        Condition {
+            column: self.column,
+            value: BindValue::I64(value as i64),
+            _entity: PhantomData,
+        }
+    }
+}
+
+//
+// Query
+//
+
 pub struct Query<E> {
-    condition: Option<Condition>,
+    condition: Option<Condition<E>>,
     limit: Option<i64>,
     _entity: PhantomData<E>,
 }
@@ -61,7 +146,7 @@ impl<E> Query<E> {
         }
     }
 
-    pub fn where_(mut self, condition: Condition) -> Self {
+    pub fn where_(mut self, condition: Condition<E>) -> Self {
         self.condition = Some(condition);
         self
     }
@@ -72,17 +157,25 @@ impl<E> Query<E> {
     }
 }
 
+//
+// SQL generation
+//
+
 impl<E> Query<E>
 where
     E: Entity,
 {
     fn build_sql(&self) -> String {
-        let columns = E::columns().join(", ");
+        let columns = E::columns()
+            .iter()
+            .map(Column::name)
+            .collect::<Vec<_>>()
+            .join(", ");
 
         let mut sql = format!("SELECT {} FROM {}", columns, E::TABLE);
 
         if let Some(condition) = &self.condition {
-            sql.push_str(&format!(" WHERE {} = $1", condition.column));
+            sql.push_str(&format!(" WHERE {} = $1", condition.column.name()));
         }
 
         if self.limit.is_some() {
@@ -95,26 +188,29 @@ where
     }
 }
 
+//
+// PostgreSQL execution
+//
+// This is intentionally kept behind the query API for now.
+//
+
 impl<E> Query<E>
 where
     E: Entity,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
-    pub async fn all(
-        self,
-        db: &sqlx::PgPool,
-    ) -> Result<Vec<E::Model>, sqlx::Error> {
+    pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<E::Model>, sqlx::Error> {
         let sql = self.build_sql();
 
         let mut query = sqlx::query_as::<_, E::Model>(&sql);
 
         if let Some(condition) = self.condition {
             match condition.value {
-                Value::String(value) => {
+                BindValue::String(value) => {
                     query = query.bind(value);
                 }
 
-                Value::I64(value) => {
+                BindValue::I64(value) => {
                     query = query.bind(value);
                 }
             }
@@ -127,6 +223,10 @@ where
         query.fetch_all(db).await
     }
 }
+
+//
+// Tests
+//
 
 #[cfg(test)]
 mod tests {
@@ -142,37 +242,37 @@ mod tests {
 
         const TABLE: &'static str = "users";
 
-        fn columns() -> &'static [&'static str] {
-            &["id", "name"]
-        }
+        const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
     }
 
     impl TestUser {
         #[allow(non_upper_case_globals)]
-        const name: Field<String> = Field::new("name");
-    }
+        const id: Field<Self, i32> = Field::new("id");
 
+        #[allow(non_upper_case_globals)]
+        const name: Field<Self, String> = Field::new("name");
+    }
 
     struct TestPost;
 
     #[derive(Debug)]
     struct TestPostModel;
-
     impl Entity for TestPost {
         type Model = TestPostModel;
 
         const TABLE: &'static str = "posts";
 
-        fn columns() -> &'static [&'static str] {
-            &["id", "title"]
-        }
+        const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("title")];
     }
 
     impl TestPost {
         #[allow(non_upper_case_globals)]
-        const title: Field<String> = Field::new("title");
-    }
+        #[allow(dead_code)]
+        const id: Field<Self, i32> = Field::new("id");
 
+        #[allow(non_upper_case_globals)]
+        const title: Field<Self, String> = Field::new("title");
+    }
 
     #[test]
     fn user_query_is_generic() {
@@ -182,24 +282,35 @@ mod tests {
 
         let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users WHERE name = $1 LIMIT $2"
-        );
+        assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1 LIMIT $2");
     }
-
 
     #[test]
     fn post_query_is_generic() {
-        let query = TestPost::find()
-            .where_(TestPost::title.eq("Rust"))
-            .take(10);
+        let query = TestPost::find().where_(TestPost::title.eq("Rust")).take(10);
 
         let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, title FROM posts WHERE title = $1 LIMIT $2"
-        );
+        assert_eq!(sql, "SELECT id, title FROM posts WHERE title = $1 LIMIT $2");
+    }
+
+    #[test]
+    fn integer_field_is_typed() {
+        let query = TestUser::find().where_(TestUser::id.eq(10));
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE id = $1");
+    }
+
+    #[test]
+    fn condition_belongs_to_entity() {
+        let condition = TestUser::name.eq("Fakhir");
+
+        let query = TestUser::find().where_(condition);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
     }
 }
