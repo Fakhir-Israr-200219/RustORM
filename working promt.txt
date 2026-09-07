@@ -270,12 +270,419 @@ Aur haan bhai, `schema.rustorm` + generated entities/migrations wali architectur
 
 
 
+////////////////////////////////////////////////////////////
+/////////////////////////   important   ////////////////////
+////////////////////////////////////////////////////////////
+
+Haan bhai. **Ab baat clear hai.** Ye jo current code nikla hai, isko hum **RustORM runtime ka first working prototype** samjhenge — final runtime nahi.
+
+Aur tumhari direction sahi hai:
+
+> **Pehle runtime ko properly design + mature karenge → phir ek file se nikal kar proper folder/module structure mein split karenge.**
+
+Lekin ek important distinction: **runtime generated entities ko “know” nahi karega**. Runtime generic capabilities provide karega jinhein `.rustorm/entities` ka generated code use karega.
+
+### Current runtime mein abhi kya hai
+
+```text
+rustorm runtime
+│
+├── Entity
+├── Field<T>
+├── Value
+├── Condition
+├── Query<E>
+├── SQL generation
+└── SQLx execution
+```
+
+Aur generated side future mein kuch aisi hogi:
+
+```text
+application/
+│
+├── .rustorm/
+│   ├── schema.rustorm
+│   ├── entities/
+│   │   ├── user.rs
+│   │   ├── post.rs
+│   │   └── ...
+│   │
+│   └── migrations/
+│       ├── ...
+│       └── ...
+│
+└── src/
+```
+
+Generated `user.rs` runtime ki APIs use karega:
+
+```text
+Generated User
+      │
+      ↓
+rustorm::Entity
+rustorm::Field
+rustorm::Query
+rustorm::...
+      │
+      ↓
+SQLx
+      │
+      ↓
+Database
+```
+
+Isliye **User hardcode karna runtime ki final design nahi hai.** Current `User` sirf generated-code ko manually simulate kar raha hai.
+
+---
+
+## Ab hum runtime ko proper order mein mature karenge
+
+Main abhi sirf **runtime** ki baat kar raha hoon:
+
+### 1. Entity system
+
+```rust
+Entity
+```
+
+ko proper generic foundation banayenge.
+
+Goal:
+
+```rust
+User
+Post
+Order
+Product
+```
+
+sab generated entities same runtime APIs use kar saken.
+
+---
+
+### 2. Field / column system
+
+Abhi:
+
+```rust
+Field<T>
+```
+
+bahut basic hai.
+
+Isko query expressions ki proper foundation banayenge.
+
+For example eventually:
+
+```rust
+User::name.eq("Fakhir")
+User::id.eq(10)
+```
+
+aur phir:
+
+```rust
+User::age.gt(18)
+User::name.ne("Ali")
+```
+
+jaisi expressions runtime understand kare.
+
+**Abhi sirf String equality hai**, isko gradually generic karenge.
+
+---
+
+### 3. Query system
+
+Current:
+
+```rust
+Query<E>
+```
+
+already correct direction hai.
+
+Isko gradually proper query representation banayenge:
+
+```text
+Query
+ │
+ ├── Entity
+ ├── Selection
+ ├── Conditions
+ ├── Ordering
+ ├── Limit
+ └── Offset
+```
+
+Taake SQL directly string-building se nahi, proper query structure se generate ho.
+
+---
+
+### 4. Bind/value system
+
+Current:
+
+```rust
+enum Value {
+    String(String),
+    I64(i64),
+}
+```
+
+ko runtime ka proper value/binding abstraction banayenge.
+
+Goal:
+
+```text
+Rust value
+    ↓
+RustORM Value
+    ↓
+SQL bind
+    ↓
+SQLx
+```
+
+---
+
+### 5. Error handling
+
+Isko bhi runtime ka proper part banayenge.
+
+Abhi:
+
+```rust
+Result<Vec<User>, sqlx::Error>
+```
+
+hai.
+
+Final runtime mein application ko ideally:
+
+```rust
+Result<T, RustOrmError>
+```
+
+mile.
+
+Aur error categories meaningful hongi:
+
+```text
+RustOrmError
+├── Database
+├── Query
+├── InvalidQuery
+├── Bind
+├── Migration
+└── ...
+```
+
+**Lekin exact variants hum implementation ke waqt decide karenge**, abhi unnecessary list nahi banayenge.
+
+---
+
+### 6. Executor
+
+Current query directly:
+
+```rust
+sqlx::PgPool
+```
+
+ko jaanti hai.
+
+Runtime ko proper execution boundary denge:
+
+```text
+Query
+   ↓
+SQL statement
+   ↓
+Executor
+   ↓
+SQLx
+   ↓
+PostgreSQL
+```
+
+Isse runtime architecture clean hogi.
+
+---
+
+### 7. Relations
+
+Phir generated entities relations express kar saken:
+
+```text
+User
+ │
+ └── posts
+       ↓
+      Post
+```
+
+aur eventually:
+
+```rust
+user.posts()
+```
+
+ya query-oriented relation APIs.
+
+Yahan **one-to-one, one-to-many, many-to-one, many-to-many** ka proper design aayega.
+
+---
+
+### 8. Multiple entities
+
+Phir manually `User` ke saath:
+
+```text
+Post
+Comment
+Category
+Order
+OrderItem
+```
+
+jaisi entities test karenge.
+
+Yahan prove hoga ke runtime actually generic hai, sirf `User` ke liye nahi.
+
+---
+
+## Uske baad file ko split karenge
+
+Jab concepts stable ho jayen, tab current:
+
+```text
+src/lib.rs
+```
+
+ko kuch is direction mein divide kar sakte hain:
+
+```text
+src/
+├── lib.rs
+│
+├── entity/
+│   ├── mod.rs
+│   └── ...
+│
+├── query/
+│   ├── mod.rs
+│   ├── query.rs
+│   ├── condition.rs
+│   └── ...
+│
+├── field/
+│   ├── mod.rs
+│   └── ...
+│
+├── value/
+│   ├── mod.rs
+│   └── ...
+│
+├── executor/
+│   ├── mod.rs
+│   └── ...
+│
+├── error.rs
+│
+└── sql/
+    ├── mod.rs
+    └── ...
+```
+
+**Lekin abhi folder structure banane ki zaroorat nahi.** Pehle runtime ke concepts mature karte hain, phir natural boundaries ke according split karenge.
+
+---
+
+## Aur `.rustorm` architecture lock
+
+Ye distinction main aage maintain karunga:
+
+```text
+                 RUSTORM
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+   rustorm runtime          rustorm-cli
+        │                       │
+        │                 schema.rustorm
+        │                       │
+        │                 Schema AST
+        │                       │
+        │              ┌────────┴────────┐
+        │              ↓                 ↓
+        │         entities          migrations
+        │
+        ↓
+      SQLx
+        ↓
+    Database
+```
+
+**`schema.rustorm` → source of truth**
+
+**`entities/` → generated application-specific code**
+
+**`migrations/` → generated/versioned migration history**
+
+**`rustorm` → generic runtime**
+
+**`rustorm-cli` → generator/migration tooling**
+
+Ye separation hamari architecture ka fundamental rule rahega.
+
+Aur haan bhai — **abhi hum isi runtime ko file-by-file nahi, concept-by-concept mature karenge.** Current `User` implementation ko bhi isi liye final architecture nahi samjhenge; ye generated entity ka temporary manual stand-in hai.
 
 
 
 
+////////////////////////////////////////////////////////////
+/////////////////////////   important   ////////////////////
+////////////////////////////////////////////////////////////
 
 
+Is phase ka pehla step
+
+Main pehle Entity trait ko production-oriented design mein redesign karunga, bina abhi folder structure change kiye.
+
+Phir User ko us naye contract par migrate karenge aur second entity, e.g. Post, bana kar prove karenge ke runtime genuinely generic hai.
+
+Yani abhi target simple hai:
+
+“RustORM runtime ko User-specific se genuinely Entity-generic banana.”
+
+Uske baad hi next abstraction par jayenge.
+
+HOUR 1
+Entity + Model architecture
+        ↓
+HOUR 2
+Generic Query<E>::all()
+        ↓
+HOUR 3
+Post entity + PostgreSQL test
+        ↓
+HOUR 4
+Generic fields / conditions
+        ↓
+HOUR 5
+Multiple conditions
+        ↓
+HOUR 6
+Query builder robustness
+        ↓
+HOUR 7
+Runtime integration tests
+        ↓
+HOUR 8
+Clean-up + architecture review
 
 
 

@@ -121,11 +121,18 @@ where
     }
 }
 
-impl Query<User> {
-    pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<User>, sqlx::Error> {
+impl<E> Query<E>
+where
+    E: Entity,
+    for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+{
+    pub async fn all(
+        self,
+        db: &sqlx::PgPool,
+    ) -> Result<Vec<E::Model>, sqlx::Error> {
         let sql = self.build_sql();
 
-        let mut query = sqlx::query_as::<_, User>(&sql);
+        let mut query = sqlx::query_as::<_, E::Model>(&sql);
 
         if let Some(condition) = self.condition {
             match condition.value {

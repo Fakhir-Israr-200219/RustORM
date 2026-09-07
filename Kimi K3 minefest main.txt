@@ -964,4 +964,32 @@ Ab save karo chat. Aur kal subah code likhna shuru karo. Song nahi.
 
 
 
+///////////////////////////////////////////////////////////////////////////////
+//// ye hamara generated code hoha jo ./rustorm/entities/user.rs main hoga ////
+///////////////////////////////////////////////////////////////////////////////
+
+use rustorm::{Entity, Field};
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct UserModel {
+    pub id: i32,
+    pub name: String,
+}
+
+pub struct User;
+
+impl Entity for User {
+    type Model = UserModel;
+
+    const TABLE: &'static str = "users";
+
+    fn columns() -> &'static [&'static str] {
+        &["id", "name"]
+    }
+}
+
+impl User {
+    pub const id: Field<i32> = Field::new("id");
+    pub const name: Field<String> = Field::new("name");
+}
 
