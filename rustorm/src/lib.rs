@@ -73,6 +73,27 @@ impl<E, T> Field<E, T> {
             direction: OrderDirection::Desc,
         }
     }
+
+    pub fn count(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Function {
+                function: AggregateFunction::Count,
+                expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
+
+    pub fn select(&self) -> SelectItem<E> {
+        SelectItem {
+            expression: Expression::Column(self.column),
+            _entity: PhantomData,
+        }
+    }
+
+    pub fn column(&self) -> Column {
+        self.column
+    }
 }
 
 //
@@ -178,8 +199,8 @@ impl<E> Field<E, i32> {
 //
 // Select Statement
 //
-pub struct SelectStatement {
-    columns: Vec<Column>,
+pub struct SelectStatement<E> {
+    columns: Vec<SelectItem<E>>,
     table: &'static str,
     where_clause: Option<Expression>,
     order_by: Option<OrderBy>,
@@ -188,6 +209,7 @@ pub struct SelectStatement {
     distinct: bool,
     group_by: Vec<Column>,
     having: Option<Expression>,
+    selected_explicitly: bool,
 }
 enum OrderDirection {
     Asc,
@@ -208,9 +230,31 @@ enum BinaryOperator {
     And,
     Or,
 }
+pub struct SelectItem<E> {
+    expression: Expression,
+    _entity: PhantomData<E>,
+}
+
+impl<E> SelectItem<E> {
+    pub fn gt(self, value: i32) -> Condition<E> {
+        Condition {
+            expression: Expression::Binary {
+                left: Box::new(self.expression),
+                operator: BinaryOperator::Gt,
+                right: Box::new(Expression::Value(BindValue::I64(value as i64))),
+            },
+            _entity: PhantomData,
+        }
+    }
+}
+
 enum Expression {
     Column(Column),
     Value(BindValue),
+    Function {
+        function: AggregateFunction,
+        expression: Box<Expression>,
+    },
     Binary {
         left: Box<Expression>,
         operator: BinaryOperator,
@@ -218,6 +262,9 @@ enum Expression {
     },
 }
 
+enum AggregateFunction {
+    Count,
+}
 impl<E> Condition<E> {
     pub fn and(self, other: Condition<E>) -> Condition<E> {
         Condition {
@@ -251,7 +298,7 @@ impl<E> Condition<E> {
 //
 
 pub struct Query<E> {
-    statement: SelectStatement,
+    statement: SelectStatement<E>,
     _entity: PhantomData<E>,
 }
 fn collect_bind_values(expression: &Expression, values: &mut Vec<BindValue>) {
@@ -267,7 +314,9 @@ fn collect_bind_values(expression: &Expression, values: &mut Vec<BindValue>) {
                 values.push(BindValue::I64(*value));
             }
         },
-
+        Expression::Function { expression, .. } => {
+            collect_bind_values(expression, values);
+        }
         Expression::Binary { left, right, .. } => {
             collect_bind_values(left, values);
             collect_bind_values(right, values);
@@ -306,6 +355,18 @@ fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> 
 
             format!("{} {} {}", left_sql, operator_sql, right_sql)
         }
+        Expression::Function {
+            function,
+            expression,
+        } => {
+            let expression_sql = compile_expression(expression, next_placeholder);
+
+            match function {
+                AggregateFunction::Count => {
+                    format!("COUNT({})", expression_sql)
+                }
+            }
+        }
     }
 }
 impl<E> Query<E>
@@ -315,7 +376,14 @@ where
     fn new() -> Self {
         Self {
             statement: SelectStatement {
-                columns: E::columns().to_vec(),
+                columns: E::columns()
+                    .iter()
+                    .map(|column| SelectItem {
+                        expression: Expression::Column(*column),
+                        _entity: PhantomData,
+                    })
+                    .collect(),
+
                 table: E::TABLE,
                 where_clause: None,
                 order_by: None,
@@ -324,6 +392,7 @@ where
                 distinct: false,
                 group_by: Vec::new(),
                 having: None,
+                selected_explicitly: false,
             },
             _entity: PhantomData,
         }
@@ -363,6 +432,17 @@ where
         self.statement.having = Some(condition.expression);
         self
     }
+
+    pub fn select(mut self, item: SelectItem<E>) -> Self {
+        if !self.statement.selected_explicitly {
+            self.statement.columns.clear();
+            self.statement.selected_explicitly = true;
+        }
+
+        self.statement.columns.push(item);
+
+        self
+    }
 }
 
 //
@@ -374,11 +454,12 @@ where
     E: Entity,
 {
     fn build_sql(&self) -> String {
+        let mut next_placeholder = 1;
         let columns = self
             .statement
             .columns
             .iter()
-            .map(Column::name)
+            .map(|item| compile_expression(&item.expression, &mut next_placeholder))
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -387,8 +468,6 @@ where
         } else {
             format!("SELECT {} FROM {}", columns, self.statement.table)
         };
-
-        let mut next_placeholder = 1;
 
         if let Some(condition) = &self.statement.where_clause {
             sql.push_str(" WHERE ");
@@ -447,6 +526,95 @@ where
     pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<E::Model>, sqlx::Error> {
         let sql = self.build_sql();
         let mut query = sqlx::query_as::<_, E::Model>(&sql);
+
+        if let Some(expression) = &self.statement.where_clause {
+            let mut values = Vec::new();
+
+            collect_bind_values(expression, &mut values);
+
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
+                    }
+                }
+            }
+        }
+
+        if let Some(expression) = &self.statement.having {
+            let mut values = Vec::new();
+
+            collect_bind_values(expression, &mut values);
+
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
+                    }
+                }
+            }
+        }
+
+        query.fetch_all(db).await
+    }
+    pub async fn count(self, db: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
+        let sql = self.build_sql();
+
+        let mut query = sqlx::query_scalar::<_, i64>(&sql);
+
+        if let Some(expression) = &self.statement.where_clause {
+            let mut values = Vec::new();
+
+            collect_bind_values(expression, &mut values);
+
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
+                    }
+                }
+            }
+        }
+
+        if let Some(expression) = &self.statement.having {
+            let mut values = Vec::new();
+
+            collect_bind_values(expression, &mut values);
+
+            for value in values {
+                match value {
+                    BindValue::String(value) => {
+                        query = query.bind(value);
+                    }
+
+                    BindValue::I64(value) => {
+                        query = query.bind(value);
+                    }
+                }
+            }
+        }
+
+        query.fetch_one(db).await
+    }
+    pub async fn fetch_all<R>(self, db: &sqlx::PgPool) -> Result<Vec<R>, sqlx::Error>
+    where
+        for<'r> R: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    {
+        let sql = self.build_sql();
+
+        let mut query = sqlx::query_as::<_, R>(&sql);
 
         if let Some(expression) = &self.statement.where_clause {
             let mut values = Vec::new();
@@ -714,9 +882,7 @@ mod tests {
             .where_(TestUser::id.gt(5))
             .group_by(TestUser::name.column)
             .having(TestUser::id.gt(10));
-
         let sql = query.build_sql();
-
         assert_eq!(
             sql,
             "SELECT id, name FROM users WHERE id > $1 GROUP BY name HAVING id > $2"
@@ -728,27 +894,73 @@ mod tests {
             .where_(TestUser::id.gt(5))
             .group_by(TestUser::name.column)
             .having(TestUser::id.gt(10));
-
         let mut values = Vec::new();
-
         if let Some(expression) = &query.statement.where_clause {
             collect_bind_values(expression, &mut values);
         }
+        if let Some(expression) = &query.statement.having {
+            collect_bind_values(expression, &mut values);
+        }
+        assert_eq!(values.len(), 2);
+        match &values[0] {
+            BindValue::I64(value) => assert_eq!(*value, 5),
+            _ => panic!("expected first bind value to be i64"),
+        }
+        match &values[1] {
+            BindValue::I64(value) => assert_eq!(*value, 10),
+            _ => panic!("expected second bind value to be i64"),
+        }
+    }
+    #[test]
+    fn count_select_works() {
+        let query = TestUser::find().select(TestUser::id.count());
+        let sql = query.build_sql();
+        assert_eq!(sql, "SELECT COUNT(id) FROM users");
+    }
+    #[test]
+    fn count_with_group_by_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.count())
+            .group_by(TestUser::name.column);
+
+        let sql = query.build_sql();
+        assert_eq!(sql, "SELECT name, COUNT(id) FROM users GROUP BY name");
+    }
+    #[test]
+    fn count_with_group_by_and_having_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.count())
+            .group_by(TestUser::name.column)
+            .having(TestUser::id.count().gt(1));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT name, COUNT(id) FROM users GROUP BY name HAVING COUNT(id) > $1"
+        );
+    }
+    #[test]
+    fn aggregate_having_collect_bind_value_works() {
+        let query = TestUser::find()
+            .select(TestUser::name.select())
+            .select(TestUser::id.count())
+            .group_by(TestUser::name.column)
+            .having(TestUser::id.count().gt(1));
+
+        let mut values = Vec::new();
 
         if let Some(expression) = &query.statement.having {
             collect_bind_values(expression, &mut values);
         }
 
-        assert_eq!(values.len(), 2);
+        assert_eq!(values.len(), 1);
 
         match &values[0] {
-            BindValue::I64(value) => assert_eq!(*value, 5),
-            _ => panic!("expected first bind value to be i64"),
-        }
-
-        match &values[1] {
-            BindValue::I64(value) => assert_eq!(*value, 10),
-            _ => panic!("expected second bind value to be i64"),
+            BindValue::I64(value) => assert_eq!(*value, 1),
+            _ => panic!("expected aggregate HAVING bind value to be i64"),
         }
     }
 }

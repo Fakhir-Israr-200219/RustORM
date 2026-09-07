@@ -768,9 +768,17 @@ working on offset ^|-- done
 working on DISTINCT  ^|-- done
 working on group by ^|-- done
 working on Haveing ^|-- done
-working on aggregate
-
-
+working on aggregate ^|-- done
+✅ COUNT()
+✅ COUNT + WHERE
+✅ GROUP BY
+✅ HAVING
+✅ COUNT + GROUP BY + HAVING
+✅ bind values
+✅ AST compilation
+✅ real PostgreSQL execution
+✅ generic aggregate result fetch_all::<UserCount>()
+working on aggregate SUM
 
 Lekin ek important distinction: abhi humne unit-level AST/compiler test kiya hai. Abhi actual PostgreSQL par nested AND/OR query execute karke verify nahi kiya. Wo next logical verification hoga.
 Yahan ek interesting architectural point bhi hai: LIMIT bind parameter bhi ho sakta hai (LIMIT $2), lekin abhi hum simple literal LIMIT 20 rakhenge. Pehle query AST ko stable karte hain.

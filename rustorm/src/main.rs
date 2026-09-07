@@ -7,6 +7,12 @@ pub struct UserModel {
     pub name: String,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct UserCount {
+    name: String,
+    count: i64,
+}
+
 pub struct User;
 
 impl Entity for User {
@@ -52,12 +58,31 @@ async fn main() -> Result<(), sqlx::Error> {
         .all(&db)
         .await?;
 
+    let user_count = User::find().select(User::id.count()).count(&db).await?;
+
     let posts = Post::find().where_(Post::title.eq("Rust")).all(&db).await?;
-    // User::find()
-    // .where_(Post::title.eq("Rust"));
+
+    let user_count_with_where_ = User::find()
+        .where_(User::name.eq("Fakhir"))
+        .select(User::id.count())
+        .count(&db)
+        .await?;
+
+    let grouped_counts = User::find()
+        .select(User::name.select())
+        .select(User::id.count())
+        .group_by(User::name.column())
+        .having(User::id.count().gt(1))
+        .fetch_all::<UserCount>(&db)
+        .await?;
 
     println!("Users: {users:#?}");
+    println!("User count: {user_count}");
     println!("Posts: {posts:#?}");
+    println!("User Count with where_ clause: {user_count_with_where_:#?}");
+    println!("Grouped counts: {grouped_counts:#?}");
+    // User::find()
+    // .where_(Post::title.eq("Rust"));
 
     Ok(())
 }
