@@ -714,4 +714,43 @@ mod tests {
 
         assert_eq!(sql, "SELECT id, name FROM users CROSS JOIN posts");
     }
+    #[test]
+    fn where_in_subquery_works() {
+        let subquery = TestUser::find().select(TestUser::id.select());
+
+        let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         WHERE id IN (SELECT id FROM users)"
+        );
+    }
+    #[test]
+    fn complex_subquery_works() {
+        let subquery = TestUser::find()
+            .select(TestUser::id.select())
+            .where_(TestUser::name.eq("Fakhir"))
+            .group_by(TestUser::id.column())
+            .having(TestUser::name.eq("Fakhir"))
+            .order_by(TestUser::id.asc())
+            .take(10);
+
+        let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         WHERE id IN (SELECT id FROM users \
+         WHERE name = $1 \
+         GROUP BY id \
+         HAVING name = $2 \
+         ORDER BY id ASC \
+         LIMIT 10)"
+        );
+    }
 }

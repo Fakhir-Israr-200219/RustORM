@@ -32,6 +32,7 @@ pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut
                 BinaryOperator::Lte => "<=",
                 BinaryOperator::And => "AND",
                 BinaryOperator::Or => "OR",
+                BinaryOperator::In => "IN",
             };
 
             let right_sql = compile_expression(right, next_placeholder);
@@ -64,6 +65,9 @@ pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut
                 }
             }
         }
+        Expression::Subquery(subquery) => {
+            format!("({})", subquery.sql)
+        }
     }
 }
 
@@ -87,5 +91,6 @@ pub(crate) fn collect_bind_values(expression: &Expression, values: &mut Vec<Bind
             collect_bind_values(left, values);
             collect_bind_values(right, values);
         }
+        Expression::Subquery(_) => {}
     }
 }

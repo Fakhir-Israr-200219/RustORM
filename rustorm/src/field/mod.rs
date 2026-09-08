@@ -9,6 +9,7 @@ use crate::OrderBy;
 use crate::OrderDirection;
 use crate::SelectItem;
 use crate::entity::Entity;
+use crate::query::expression::Subquery;
 use crate::query::join::JoinCondition;
 use crate::value::BindValue;
 
@@ -122,6 +123,22 @@ impl<E, T> Field<E, T> {
             expression: Expression::Function {
                 function: AggregateFunction::Max,
                 expression: Box::new(Expression::Column(self.column)),
+            },
+            _entity: PhantomData,
+        }
+    }
+    pub fn in_subquery<E2>(&self, subquery: crate::query::Query<E2>) -> Condition<E>
+    where
+        E: Entity,
+        E2: Entity,
+    {
+        Condition {
+            expression: Expression::Binary {
+                left: Box::new(Expression::Column(self.column)),
+                operator: BinaryOperator::In,
+                right: Box::new(Expression::Subquery(Subquery {
+                    sql: subquery.build_sql(),
+                })),
             },
             _entity: PhantomData,
         }
