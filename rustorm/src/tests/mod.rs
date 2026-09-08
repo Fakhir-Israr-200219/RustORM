@@ -753,4 +753,18 @@ mod tests {
          LIMIT 10)"
         );
     }
+    #[test]
+    fn with_relation_works() {
+        let query = TestUser::find().with(TestUser::posts);
+
+        assert_eq!(query.statement.relations.len(), 1);
+
+        let relation = &query.statement.relations[0];
+
+        assert_eq!(relation.from_table, "users");
+        assert_eq!(relation.from_column.name(), "id");
+
+        assert_eq!(relation.to_table, "posts");
+        assert_eq!(relation.to_column.name(), "user_id");
+    }
 }

@@ -28,6 +28,14 @@ where
             _to: PhantomData,
         }
     }
+    pub(crate) fn info(&self) -> crate::query::statement::RelationInfo {
+        crate::query::statement::RelationInfo {
+            from_table: From::TABLE,
+            from_column: self.from,
+            to_table: To::TABLE,
+            to_column: self.to,
+        }
+    }
 }
 
 impl<From, To> JoinTarget for Relation<From, To>

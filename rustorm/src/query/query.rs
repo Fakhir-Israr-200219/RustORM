@@ -38,6 +38,7 @@ where
                 group_by: Vec::new(),
                 having: None,
                 selected_explicitly: false,
+                relations: Vec::new(),
             },
             _entity: PhantomData,
         }
@@ -45,6 +46,15 @@ where
 
     pub fn where_(mut self, condition: Condition<E>) -> Self {
         self.statement.where_clause = Some(condition.into_ast());
+        self
+    }
+
+    pub fn with<To>(mut self, relation: crate::query::relation::Relation<E, To>) -> Self
+    where
+        E: Entity,
+        To: Entity,
+    {
+        self.statement.relations.push(relation.info());
         self
     }
 

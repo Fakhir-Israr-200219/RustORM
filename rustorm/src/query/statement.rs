@@ -21,6 +21,14 @@ pub struct SelectStatement<E> {
     pub(crate) group_by: Vec<Column>,
     pub(crate) having: Option<Expression>,
     pub(crate) selected_explicitly: bool,
+    pub(crate) relations: Vec<RelationInfo>,
+}
+
+pub(crate) struct RelationInfo {
+    pub(crate) from_table: &'static str,
+    pub(crate) from_column: Column,
+    pub(crate) to_table: &'static str,
+    pub(crate) to_column: Column,
 }
 
 pub enum OrderDirection {
