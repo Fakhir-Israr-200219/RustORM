@@ -964,36 +964,6 @@ Ab save karo chat. Aur kal subah code likhna shuru karo. Song nahi.
 
 
 
-///////////////////////////////////////////////////////////////////////////////
-//// ye hamara generated code hoha jo ./rustorm/entities/user.rs main hoga ////
-///////////////////////////////////////////////////////////////////////////////
-
-use rustorm::{Entity, Field};
-
-#[derive(Debug, sqlx::FromRow)]
-pub struct UserModel {
-    pub id: i32,
-    pub name: String,
-}
-
-pub struct User;
-
-impl Entity for User {
-    type Model = UserModel;
-
-    const TABLE: &'static str = "users";
-
-    fn columns() -> &'static [&'static str] {
-        &["id", "name"]
-    }
-}
-
-impl User {
-    pub const id: Field<i32> = Field::new("id");
-    pub const name: Field<String> = Field::new("name");
-}
-
-
 /////////////////
 ///wokring on ///
 /////////////////
@@ -1006,10 +976,78 @@ impl User {
 7. HAVING done
 after sepration in modules
 8. JOIN
+    1. INNER JOIN
+    2. LEFT JOIN (LEFT OUTER JOIN)
+    3. RIGHT JOIN (RIGHT OUTER JOIN)
+    4. FULL JOIN (FULL OUTER JOIN)
+5. CROSS JOIN
 9. Subquery
 10. CTE
 11. UNION
 12. FOR UPDATE
+
+////////////////////////////////
+////pgAdmin use full clause ////
+///////////////////////////////
+1. DISTINCT ON
+2. FETCH FIRST
+3. TABLESAMPLE
+4. LATERAL
+5. ARRAY
+6. JSON
+7. FILTER
+8. WITHIN GROUP
+9. RECURSIVE
+10. MATERIALIZED / NOT MATERIALIZED
+11. SKIP LOCKED
+12. NOWAIT
+13. GROUPING SETS
+14. CUBE
+15. ROLLUP
+16. WINDOW
+17. ROWS/RANGE BETWEEN
+18. WITH ORDINALITY (for table functions)
+19. RETURNS TABLE (in functions)
+20. SET (for setting configuration)
+
+
+///////////////////////
+////pgAdmin clause ////
+//////////////////////
+1. DISTINCT ON
+2. FETCH FIRST (with TIES, PERCENT - Oracle style also supported)
+3. TABLESAMPLE
+4. LATERAL
+5. ARRAY (array operations)
+6. JSON (JSON functions/operators - ->, ->>, @>, etc)
+7. FILTER (Aggregate filter clause)
+8. WITHIN GROUP (Ordered-set aggregates)
+9. RECURSIVE
+10. MATERIALIZED / NOT MATERIALIZED (CTE hints)
+11. SKIP LOCKED
+12. NOWAIT
+13. NO_REWRITE (Query rewrite hint)
+14. COST (Cost estimate hint - in EXPLAIN only)
+15. ROWS (Rows estimate hint - in EXPLAIN only)
+16. GENSTATS (PostgreSQL - for planning statistics)
+17. JOINS (Join order hint - via extension)
+18. LEADING (Join order hint - via extension)
+19. USE_HASH (Join method hint)
+20. USE_MERGE (Join method hint)
+21. USE_NL (Nested loop join hint)
+22. PARALLEL (Parallel query hint)
+23. INDEX (Index scan hint)
+24. INDEXSCAN (Index scan hint - force index scan)
+25. SEQSCAN (Sequential scan hint)
+26. GATHER (Gather node hint - parallel)
+27. RESCAN (Rescan hint - for CTE)
+28. OMIT (Omit hint - for planning)
+
+
+
+
+
+
 
 
 /////////////////
@@ -1116,3 +1154,7 @@ after sepration in modules
 98. INCLUDE (PostgreSQL - for indexes, not SELECT)
 99. OMIT (PostgreSQL)
 100. SET (For setting session variables within query)
+
+
+
+

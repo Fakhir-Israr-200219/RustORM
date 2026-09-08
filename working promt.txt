@@ -1,80 +1,87 @@
-|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-||||||||||||||||  ***   now focus on this  ***   ||||||||||||||||||
-|||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||||
-
-src/
-│
-├── entity/
-│   └── mod.rs
-│       Entity
-│       Column
-│
-├── field/
-│   └── mod.rs
-│       Field
-│
-├── query/
-│   ├── mod.rs
-│   ├── query.rs
-│   │   Query
-│   │
-│   ├── expression.rs
-│   │   Expression
-│   │   BinaryOperator
-│   │   AggregateFunction
-│   │
-│   ├── condition.rs
-│   │   Condition
-│   │
-│   └── statement.rs
-│       SelectStatement
-│       OrderBy
-│       OrderDirection
-│       SelectItem
-│
-├── value/
-│   └── mod.rs
-│       BindValue
-│
-├── sql/
-│   ├── mod.rs
-│   └── postgres.rs
-│       SQL compiler
-│
-├── executor/
-│   └── mod.rs
-│       all()
-│       count()
-│       fetch_all()
-│
-└── lib.rs
-    public API / re-exports
+Result kis Rust type mein jayega?
+UserModel + Vec<PostModel>?
+flat result?
+nested result?
+.with() ka API?
+multiple relations?
+aliases?
+duplicate columns?
+pagination with joins?
+aggregation + joins?
+generated relation metadata kahan rahegi?
 
 
+PHASE 1
+Core Query Engine
+        │
+        ▼
+PHASE 2
+Query Architecture
+        │
+        ├── JOIN
+        ├── Relation representation
+        ├── INSERT
+        ├── UPDATE
+        ├── DELETE
+        └── transactions
+        │
+        ▼
+PHASE 3
+Database Layer
+        │
+        ├── Executor
+        ├── Database / Pool
+        ├── Error handling
+        └── PostgreSQL abstraction
+        │
+        ▼
+PHASE 4
+Schema System
+        │
+        ├── schema.rustorm parser
+        ├── schema representation
+        └── validation
+        │
+        ▼
+PHASE 5
+CLI
+        │
+        ├── rustorm init
+        ├── rustorm dev
+        ├── migration generation
+        └── entity generation
+        │
+        ▼
+PHASE 6
+Relations
+        │
+        ├── belongs_to
+        ├── has_many
+        ├── has_one
+        └── many_to_many
+        │
+        ▼
+PHASE 7
+Production hardening
+        │
+        ├── visibility
+        ├── errors
+        ├── transactions
+        ├── clippy
+        ├── docs
+        ├── tests
+        └── multi-database architecture
 
-| Current code           | New location          |
-| ---------------------- | --------------------- |
-| `Entity`               | `entity/mod.rs`       |
-| `Column`               | `entity/mod.rs`       |
-| `Field`                | `field/mod.rs`        |
-| `Condition`            | `query/condition.rs`  |
-| `Expression`           | `query/expression.rs` |
-| `BinaryOperator`       | `query/expression.rs` |
-| `AggregateFunction`    | `query/expression.rs` |
-| `SelectStatement`      | `query/statement.rs`  |
-| `OrderBy`              | `query/statement.rs`  |
-| `OrderDirection`       | `query/statement.rs`  |
-| `SelectItem`           | `query/statement.rs`  |
-| `Query`                | `query/query.rs`      |
-| `BindValue`            | `value/mod.rs`        |
-| `compile_expression()` | `sql/postgres.rs`     |
-| `build_sql()`          | `sql/postgres.rs`     |
-| `all()`                | `executor/mod.rs`     |
-| `count()`              | `executor/mod.rs`     |
-| `fetch_all()`          | `executor/mod.rs`     |
 
 
 
+
+
+
+tests ko lib.rs se nikalna.
+collect_bind_values() aur SelectItem::gt() ko unki proper modules mein move karna.
+Phir lib.rs ko genuinely public API + module declarations tak reduce karna.
+Last mein warning clean karni.
 
 
 
@@ -95,3 +102,7 @@ src/
 Lekin ek important distinction: abhi humne unit-level AST/compiler test kiya hai. Abhi actual PostgreSQL par nested AND/OR query execute karke verify nahi kiya. Wo next logical verification hoga.
 Yahan ek interesting architectural point bhi hai: LIMIT bind parameter bhi ho sakta hai (LIMIT $2), lekin abhi hum simple literal LIMIT 20 rakhenge. Pehle query AST ko stable karte hain.
 Baad mein aggregate execution API ko clean up karenge.
+Code main visibility pr kaam krna hy 
+Next logical phase: executor module ko separate karna, phir final public API/visibility cleanup aur cargo clippy.
+main application ke module/crate ka part hongi, ya genuinely separate generated crate.
+Prisma-style DX ke liye dono possibilities hain, aur Rust ki workspace/package rules ki wajah se ye decision important hai.

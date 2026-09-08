@@ -1,4 +1,4 @@
-use rustorm::{Column, Entity, Field};
+use rustorm::{Column, Entity, field::Field};
 use sqlx::PgPool;
 use sqlx::types::BigDecimal;
 
