@@ -1,7 +1,7 @@
 use crate::entity::Column;
 use crate::value::BindValue;
 
-pub enum BinaryOperator {
+pub(crate) enum BinaryOperator {
     Eq,
     NotEq,
     Gt,
@@ -12,7 +12,7 @@ pub enum BinaryOperator {
     Or,
 }
 
-pub enum AggregateFunction {
+pub(crate) enum AggregateFunction {
     Count,
     Sum,
     Avg,
@@ -20,7 +20,7 @@ pub enum AggregateFunction {
     Max,
 }
 
-pub enum Expression {
+pub(crate) enum Expression {
     Column(Column),
     Value(BindValue),
     Function {
