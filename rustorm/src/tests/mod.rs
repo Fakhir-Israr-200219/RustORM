@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use crate::query::relation::Relation;
     use crate::sql::collect_bind_values;
     use crate::sql::compile_expression;
     use crate::value::BindValue;
@@ -16,8 +17,12 @@ mod tests {
     impl TestUser {
         #[allow(non_upper_case_globals)]
         const id: Field<Self, i32> = Field::new("id");
+
         #[allow(non_upper_case_globals)]
         const name: Field<Self, String> = Field::new("name");
+
+        #[allow(non_upper_case_globals)]
+        const posts: Relation<Self, TestPost> = Relation::new(Self::id, TestPost::user_id);
     }
     struct TestPost;
     #[derive(Debug)]
@@ -31,8 +36,39 @@ mod tests {
         #[allow(non_upper_case_globals)]
         #[allow(dead_code)]
         const id: Field<Self, i32> = Field::new("id");
+
+        #[allow(non_upper_case_globals)]
+        const user_id: Field<Self, i32> = Field::new("user_id");
+
         #[allow(non_upper_case_globals)]
         const title: Field<Self, String> = Field::new("title");
+
+        #[allow(non_upper_case_globals)]
+        const comments: Relation<Self, TestComment> = Relation::new(Self::id, TestComment::post_id);
+    }
+
+    struct TestComment;
+
+    #[derive(Debug)]
+    struct TestCommentModel;
+
+    impl Entity for TestComment {
+        type Model = TestCommentModel;
+        const TABLE: &'static str = "comments";
+        const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("body")];
+    }
+
+    impl TestComment {
+        #[allow(non_upper_case_globals)]
+        #[allow(dead_code)]
+        const id: Field<Self, i32> = Field::new("id");
+
+        #[allow(non_upper_case_globals)]
+        const post_id: Field<Self, i32> = Field::new("post_id");
+
+        #[allow(non_upper_case_globals)]
+        #[allow(dead_code)]
+        const body: Field<Self, String> = Field::new("body");
     }
     #[test]
     fn user_query_is_generic() {
@@ -441,6 +477,233 @@ mod tests {
         assert_eq!(
             query.build_sql(),
             "SELECT name, MAX(id) FROM users GROUP BY name HAVING MAX(id) > $1"
+        );
+    }
+    #[test]
+    fn inner_join_works() {
+        let query = TestUser::find().inner_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
+        );
+    }
+    #[test]
+    fn left_join_works() {
+        let query = TestUser::find().left_join(TestPost::id.eq_column(TestUser::id));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users LEFT JOIN posts ON posts.id = users.id"
+        );
+    }
+
+    #[test]
+    fn right_join_works() {
+        let query = TestUser::find().right_join(TestPost::id.eq_column(TestUser::id));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users RIGHT JOIN posts ON posts.id = users.id"
+        );
+    }
+
+    #[test]
+    fn full_join_works() {
+        let query = TestUser::find().full_join(TestPost::id.eq_column(TestUser::id));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users FULL JOIN posts ON posts.id = users.id"
+        );
+    }
+    #[test]
+    fn relation_inner_join_works() {
+        let query = TestUser::find().inner_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
+        );
+    }
+    #[test]
+    fn relation_left_join_works() {
+        let query = TestUser::find().left_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users LEFT JOIN posts ON users.id = posts.user_id"
+        );
+    }
+
+    #[test]
+    fn relation_right_join_works() {
+        let query = TestUser::find().right_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users RIGHT JOIN posts ON users.id = posts.user_id"
+        );
+    }
+
+    #[test]
+    fn relation_full_join_works() {
+        let query = TestUser::find().full_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users FULL JOIN posts ON users.id = posts.user_id"
+        );
+    }
+    #[test]
+    fn multiple_different_joins_work() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .left_join(TestUser::posts)
+            .right_join(TestUser::posts)
+            .full_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         LEFT JOIN posts ON users.id = posts.user_id \
+         RIGHT JOIN posts ON users.id = posts.user_id \
+         FULL JOIN posts ON users.id = posts.user_id"
+        );
+    }
+
+    #[test]
+    fn multiple_same_joins_work() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .inner_join(TestUser::posts)
+            .inner_join(TestUser::posts);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         INNER JOIN posts ON users.id = posts.user_id \
+         INNER JOIN posts ON users.id = posts.user_id"
+        );
+    }
+    #[test]
+    fn multiple_different_relation_joins_work() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .left_join(TestPost::comments);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         LEFT JOIN comments ON posts.id = comments.post_id"
+        );
+    }
+    #[test]
+    fn join_with_where_works() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .where_(TestUser::name.eq("Fakhir"));
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         WHERE name = $1"
+        );
+    }
+    #[test]
+    fn join_with_order_by_works() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .order_by(TestUser::name.asc());
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         ORDER BY name ASC"
+        );
+    }
+    #[test]
+    fn join_with_limit_and_offset_works() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .take(10)
+            .skip(5);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         LIMIT 10 OFFSET 5"
+        );
+    }
+    #[test]
+    fn join_with_group_by_works() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .group_by(TestUser::name.column());
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         GROUP BY name"
+        );
+    }
+    #[test]
+    fn complex_join_query_works() {
+        let query = TestUser::find()
+            .inner_join(TestUser::posts)
+            .where_(TestUser::name.eq("Fakhir"))
+            .group_by(TestUser::name.column())
+            .order_by(TestUser::name.asc())
+            .take(10)
+            .skip(5);
+
+        let sql = query.build_sql();
+
+        assert_eq!(
+            sql,
+            "SELECT id, name FROM users \
+         INNER JOIN posts ON users.id = posts.user_id \
+         WHERE name = $1 \
+         GROUP BY name \
+         ORDER BY name ASC \
+         LIMIT 10 OFFSET 5"
         );
     }
 }

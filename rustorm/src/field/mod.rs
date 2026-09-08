@@ -1,14 +1,16 @@
 use std::marker::PhantomData;
 
-use crate::value::BindValue;
+use crate::AggregateFunction;
+use crate::BinaryOperator;
 use crate::Column;
+use crate::Condition;
+use crate::Expression;
 use crate::OrderBy;
 use crate::OrderDirection;
 use crate::SelectItem;
-use crate::Expression;
-use crate::AggregateFunction;
-use crate::BinaryOperator;
-use crate::Condition;
+use crate::entity::Entity;
+use crate::query::join::JoinCondition;
+use crate::value::BindValue;
 
 pub struct Field<E, T> {
     column: Column,
@@ -60,8 +62,29 @@ impl<E, T> Field<E, T> {
         }
     }
 
-    pub fn column(&self) -> Column {
+    pub const fn column(&self) -> Column {
         self.column
+    }
+
+    pub fn eq_column<E2>(&self, other: Field<E2, T>) -> JoinCondition
+    where
+        E: Entity,
+        E2: Entity,
+    {
+        JoinCondition {
+            table: E::TABLE,
+            expression: Expression::Binary {
+                left: Box::new(Expression::Column(Column::qualified(
+                    E::TABLE,
+                    self.column.name(),
+                ))),
+                operator: BinaryOperator::Eq,
+                right: Box::new(Expression::Column(Column::qualified(
+                    E2::TABLE,
+                    other.column.name(),
+                ))),
+            },
+        }
     }
 
     pub fn sum(&self) -> SelectItem<E> {
@@ -106,18 +129,12 @@ impl<E, T> Field<E, T> {
 }
 
 impl<E> Field<E, String> {
-    fn compare(
-        &self,
-        operator: BinaryOperator,
-        value: impl Into<String>,
-    ) -> Condition<E> {
+    fn compare(&self, operator: BinaryOperator, value: impl Into<String>) -> Condition<E> {
         Condition {
             expression: Expression::Binary {
                 left: Box::new(Expression::Column(self.column)),
                 operator,
-                right: Box::new(Expression::Value(
-                    BindValue::String(value.into())
-                )),
+                right: Box::new(Expression::Value(BindValue::String(value.into()))),
             },
             _entity: PhantomData,
         }
@@ -149,18 +166,12 @@ impl<E> Field<E, String> {
 }
 
 impl<E> Field<E, i32> {
-    fn compare(
-        &self,
-        operator: BinaryOperator,
-        value: i32,
-    ) -> Condition<E> {
+    fn compare(&self, operator: BinaryOperator, value: i32) -> Condition<E> {
         Condition {
             expression: Expression::Binary {
                 left: Box::new(Expression::Column(self.column)),
                 operator,
-                right: Box::new(Expression::Value(
-                    BindValue::I64(value as i64)
-                )),
+                right: Box::new(Expression::Value(BindValue::I64(value as i64))),
             },
             _entity: PhantomData,
         }

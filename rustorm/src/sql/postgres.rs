@@ -1,12 +1,14 @@
-use crate::{query::expression::{
-    AggregateFunction,
-    BinaryOperator,
-    Expression,
-}, value::BindValue};
+use crate::{
+    query::expression::{AggregateFunction, BinaryOperator, Expression},
+    value::BindValue,
+};
 
 pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> String {
     match expression {
-        Expression::Column(column) => column.name().to_string(),
+        Expression::Column(column) => match column.table() {
+            Some(table) => format!("{}.{}", table, column.name()),
+            None => column.name().to_string(),
+        },
 
         Expression::Value(_) => {
             let placeholder = format!("${}", *next_placeholder);
@@ -87,4 +89,3 @@ pub(crate) fn collect_bind_values(expression: &Expression, values: &mut Vec<Bind
         }
     }
 }
-

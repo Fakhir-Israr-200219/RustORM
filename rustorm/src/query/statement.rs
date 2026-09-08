@@ -7,10 +7,12 @@ use crate::query::expression::{
     Expression,
 };
 use crate::value::BindValue;
+use crate::query::join::Join;
 
 pub struct SelectStatement<E> {
     pub(crate) columns: Vec<SelectItem<E>>,
     pub(crate) table: &'static str,
+    pub(crate) joins: Vec<Join>,
     pub(crate) where_clause: Option<Expression>,
     pub(crate) order_by: Option<OrderBy>,
     pub(crate) limit: Option<u64>,

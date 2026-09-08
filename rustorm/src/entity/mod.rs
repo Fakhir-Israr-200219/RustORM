@@ -21,15 +21,30 @@ pub trait Entity {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Column {
+    table: Option<&'static str>,
     name: &'static str,
 }
 
 impl Column {
     pub const fn new(name: &'static str) -> Self {
-        Self { name }
+        Self {
+            table: None,
+            name,
+        }
+    }
+
+    pub const fn qualified(table: &'static str, name: &'static str) -> Self {
+        Self {
+            table: Some(table),
+            name,
+        }
     }
 
     pub const fn name(&self) -> &'static str {
         self.name
+    }
+
+    pub const fn table(&self) -> Option<&'static str> {
+        self.table
     }
 }

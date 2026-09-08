@@ -3,23 +3,15 @@ use std::marker::PhantomData;
 use crate::entity::{Column, Entity};
 use crate::query::condition::Condition;
 use crate::query::expression::Expression;
-use crate::query::statement::{
-    OrderBy,
-    OrderDirection,
-    SelectItem,
-    SelectStatement,
-};
+use crate::query::join::{Join, JoinTarget, JoinType};
+use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStatement};
+use crate::sql::{collect_bind_values, compile_expression};
 use crate::value::BindValue;
-use crate::sql::{
-    collect_bind_values,
-    compile_expression,
-};
 
 pub struct Query<E> {
     pub(crate) statement: SelectStatement<E>,
     _entity: PhantomData<E>,
 }
-
 
 impl<E> Query<E>
 where
@@ -37,6 +29,7 @@ where
                     .collect(),
 
                 table: E::TABLE,
+                joins: Vec::new(),
                 where_clause: None,
                 order_by: None,
                 limit: None,
@@ -95,6 +88,70 @@ where
 
         self
     }
+
+    pub fn inner_join<T>(mut self, target: T) -> Self
+    where
+        T: JoinTarget,
+    {
+        let on = target.into_join_condition();
+        let (table, expression) = on.into_parts();
+
+        self.statement.joins.push(Join {
+            join_type: JoinType::Inner,
+            table,
+            on: expression,
+        });
+
+        self
+    }
+
+    pub fn left_join<T>(mut self, target: T) -> Self
+    where
+        T: JoinTarget,
+    {
+        let on = target.into_join_condition();
+        let (table, expression) = on.into_parts();
+
+        self.statement.joins.push(Join {
+            join_type: JoinType::Left,
+            table,
+            on: expression,
+        });
+
+        self
+    }
+
+    pub fn right_join<T>(mut self, target: T) -> Self
+    where
+        T: JoinTarget,
+    {
+        let on = target.into_join_condition();
+        let (table, expression) = on.into_parts();
+
+        self.statement.joins.push(Join {
+            join_type: JoinType::Right,
+            table,
+            on: expression,
+        });
+
+        self
+    }
+
+    pub fn full_join<T>(mut self, target: T) -> Self
+    where
+        T: JoinTarget,
+    {
+        let on = target.into_join_condition();
+        let (table, expression) = on.into_parts();
+
+        self.statement.joins.push(Join {
+            join_type: JoinType::Full,
+            table,
+            on: expression,
+        });
+
+        self
+    }
 }
 
 //
@@ -120,6 +177,27 @@ where
         } else {
             format!("SELECT {} FROM {}", columns, self.statement.table)
         };
+
+        for join in &self.statement.joins {
+            match join.join_type {
+                JoinType::Inner => {
+                    sql.push_str(" INNER JOIN ");
+                }
+                JoinType::Left => {
+                    sql.push_str(" LEFT JOIN ");
+                }
+                JoinType::Right => {
+                    sql.push_str(" RIGHT JOIN ");
+                }
+                JoinType::Full => {
+                    sql.push_str(" FULL JOIN ");
+                }
+            }
+
+            sql.push_str(join.table);
+            sql.push_str(" ON ");
+            sql.push_str(&compile_expression(&join.on, &mut next_placeholder));
+        }
 
         if let Some(condition) = &self.statement.where_clause {
             sql.push_str(" WHERE ");

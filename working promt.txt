@@ -1,3 +1,26 @@
+Aaj pehle sirf:
+JoinType
+Join
+SelectStatement.joins
+banayenge.
+Phir compiler mein:
+INNER JOIN
+LEFT JOIN
+RIGHT JOIN
+FULL JOIN
+generate karenge.
+Phir tests:
+inner_join_works
+left_join_works
+right_join_works
+full_join_works
+multiple_joins_work
+join_with_where_works
+join_with_group_by_works
+join_with_having_works
+
+
+
 Result kis Rust type mein jayega?
 UserModel + Vec<PostModel>?
 flat result?
@@ -106,3 +129,81 @@ Code main visibility pr kaam krna hy
 Next logical phase: executor module ko separate karna, phir final public API/visibility cleanup aur cargo clippy.
 main application ke module/crate ka part hongi, ya genuinely separate generated crate.
 Prisma-style DX ke liye dono possibilities hain, aur Rust ki workspace/package rules ki wajah se ye decision important hai.
+Ek correction pehle: tumhare query.rs mein Query ke andar builder + SQL compiler + executor teen layers abhi ek file mein hain. JOIN ke liye inko abhi split nahi karenge. Pehle JOIN foundation complete karte hain; baad mein executor extraction karenge jab JOIN result architecture clear ho.
+JOIN ka  pub(crate) remove krna hy 
+
+
+
+
+Haan bhai — **agar Step 4 bhi implement + tests pass ho jayein**, to hamara **basic JOIN engine complete** samjha ja sakta hai. ✅
+
+### JOIN milestone
+
+```text
+JOIN Engine
+├── INNER JOIN       ✅
+├── LEFT JOIN        ✅
+├── RIGHT JOIN       ✅
+├── FULL JOIN        ✅
+├── JoinCondition    ✅
+├── Relation         ✅
+├── JoinTarget       ✅
+├── Field-to-field   JOIN condition ✅
+└── Relation-based JOIN             ✅
+```
+
+Aur final API:
+
+```rust
+User::find()
+    .inner_join(User::posts)
+
+User::find()
+    .left_join(User::posts)
+
+User::find()
+    .right_join(User::posts)
+
+User::find()
+    .full_join(User::posts)
+```
+
+### Lekin ek distinction important hai
+
+**JOIN ka SQL/query-builder part complete hoga**, lekin **Relations system complete nahi hoga**.
+
+Baad mein relations ke liye:
+
+```text
+belongs_to
+has_many
+has_one
+many_to_many
+```
+
+aur:
+
+```rust
+User::posts
+Post::user
+```
+
+ki generated schema/CLI support banani hai.
+
+Aur `with()`:
+
+```rust
+User::find()
+    .with(User::posts)
+```
+
+ye JOIN se alag **relation loading** feature hoga.
+
+So current milestone ko hum:
+
+> **JOIN Query Engine — Complete ✅**
+
+kahenge.
+
+**Ab Step 4 implement karo, phir `cargo check` + `cargo test` chalao. Agar 47/47 green aaye, JOIN milestone officially close kar denge.**
+
