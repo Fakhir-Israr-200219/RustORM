@@ -99,7 +99,7 @@ where
         self.statement.joins.push(Join {
             join_type: JoinType::Inner,
             table,
-            on: expression,
+            on: Some(expression),
         });
 
         self
@@ -115,7 +115,7 @@ where
         self.statement.joins.push(Join {
             join_type: JoinType::Left,
             table,
-            on: expression,
+            on: Some(expression),
         });
 
         self
@@ -131,7 +131,7 @@ where
         self.statement.joins.push(Join {
             join_type: JoinType::Right,
             table,
-            on: expression,
+            on: Some(expression),
         });
 
         self
@@ -147,7 +147,16 @@ where
         self.statement.joins.push(Join {
             join_type: JoinType::Full,
             table,
-            on: expression,
+            on: Some(expression),
+        });
+
+        self
+    }
+    pub fn cross_join(mut self, table: &'static str) -> Self {
+        self.statement.joins.push(Join {
+            join_type: JoinType::Cross,
+            table,
+            on: None,
         });
 
         self
@@ -192,11 +201,17 @@ where
                 JoinType::Full => {
                     sql.push_str(" FULL JOIN ");
                 }
+                JoinType::Cross => {
+                    sql.push_str(" CROSS JOIN ");
+                }
             }
 
             sql.push_str(join.table);
-            sql.push_str(" ON ");
-            sql.push_str(&compile_expression(&join.on, &mut next_placeholder));
+
+            if let Some(on) = &join.on {
+                sql.push_str(" ON ");
+                sql.push_str(&compile_expression(on, &mut next_placeholder));
+            }
         }
 
         if let Some(condition) = &self.statement.where_clause {

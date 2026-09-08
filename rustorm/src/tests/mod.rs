@@ -706,4 +706,12 @@ mod tests {
          LIMIT 10 OFFSET 5"
         );
     }
+    #[test]
+    fn cross_join_works() {
+        let query = TestUser::find().cross_join(TestPost::TABLE);
+
+        let sql = query.build_sql();
+
+        assert_eq!(sql, "SELECT id, name FROM users CROSS JOIN posts");
+    }
 }

@@ -26,10 +26,11 @@ pub(crate) enum JoinType {
     Left,
     Right,
     Full,
+    Cross,
 }
 
 pub(crate) struct Join {
     pub(crate) join_type: JoinType,
     pub(crate) table: &'static str,
-    pub(crate) on: Expression,
+    pub(crate) on: Option<Expression>,
 }
