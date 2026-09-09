@@ -62,10 +62,10 @@ where
         self
     }
 
-    pub fn with<To>(
+    pub fn with<To, C>(
         self,
-        relation: crate::query::relation::Relation<E, To>,
-    ) -> Query<E, RelationNode<crate::query::relation::Relation<E, To>, R>>
+        relation: crate::query::relation::Relation<E, To, C>,
+    ) -> Query<E, RelationNode<crate::query::relation::Relation<E, To, C>, R>>
     where
         To: Entity,
     {

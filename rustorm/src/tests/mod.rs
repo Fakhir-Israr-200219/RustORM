@@ -1,128 +1,16 @@
+// Make the models module public and accessible
+pub mod models;
+
 #[cfg(test)]
 mod tests {
-    use crate::entity::RelationKey;
-    use crate::entity::RelationLoader;
-    use crate::query::relation::Relation;
+    use std::sync::Arc;
+
+    use super::models::*;
+    use crate::Entity;
     use crate::sql::collect_bind_values;
     use crate::sql::compile_expression;
     use crate::value::BindValue;
-    use crate::{Column, Entity, field::Field};
 
-    struct TestUser;
-    #[derive(Debug)]
-    struct TestUserModel {
-        id: i32,
-        #[allow(dead_code)]
-        name: String,
-        posts: Vec<TestPostModel>,
-    }
-    impl RelationLoader<TestPostModel> for TestUserModel {
-        fn load_relation(&mut self, related: Vec<TestPostModel>) {
-            self.posts = related;
-        }
-    }
-    impl RelationKey for TestUserModel {
-        fn relation_key(&self, column: Column) -> Option<i64> {
-            match column.name() {
-                "id" => Some(self.id as i64),
-                _ => None,
-            }
-        }
-    }
-    impl Entity for TestUser {
-        type Model = TestUserModel;
-        const TABLE: &'static str = "users";
-        const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
-    }
-    impl TestUser {
-        #[allow(non_upper_case_globals)]
-        const id: Field<Self, i32> = Field::new("id");
-
-        #[allow(non_upper_case_globals)]
-        const name: Field<Self, String> = Field::new("name");
-
-        #[allow(non_upper_case_globals)]
-        const posts: Relation<Self, TestPost> = Relation::new(Self::id, TestPost::user_id);
-    }
-    struct TestPost;
-    #[derive(Debug)]
-    struct TestPostModel {
-        id: i32,
-        #[allow(dead_code)]
-        title: String,
-        user_id: i32,
-        comments: Vec<TestCommentModel>,
-    }
-    impl RelationLoader<TestCommentModel> for TestPostModel {
-        fn load_relation(&mut self, related: Vec<TestCommentModel>) {
-            self.comments = related;
-        }
-    }
-    impl RelationKey for TestPostModel {
-        fn relation_key(&self, column: Column) -> Option<i64> {
-            match column.name() {
-                "id" => Some(self.id as i64),
-                "user_id" => Some(self.user_id as i64),
-                _ => None,
-            }
-        }
-    }
-    impl Entity for TestPost {
-        type Model = TestPostModel;
-
-        const TABLE: &'static str = "posts";
-
-        const COLUMNS: &'static [Column] = &[
-            Self::id.column(),
-            Self::title.column(),
-            Self::user_id.column(),
-        ];
-    }
-    impl TestPost {
-        #[allow(non_upper_case_globals)]
-        #[allow(dead_code)]
-        const id: Field<Self, i32> = Field::new("id");
-
-        #[allow(non_upper_case_globals)]
-        const user_id: Field<Self, i32> = Field::new("user_id");
-
-        #[allow(non_upper_case_globals)]
-        const title: Field<Self, String> = Field::new("title");
-
-        #[allow(non_upper_case_globals)]
-        const comments: Relation<Self, TestComment> = Relation::new(Self::id, TestComment::post_id);
-    }
-
-    struct TestComment;
-
-    #[derive(Debug)]
-    struct TestCommentModel {
-        #[allow(dead_code)]
-        id: i32,
-        #[allow(dead_code)]
-        body: String,
-        #[allow(dead_code)]
-        post_id: i32,
-    }
-
-    impl Entity for TestComment {
-        type Model = TestCommentModel;
-        const TABLE: &'static str = "comments";
-        const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("body")];
-    }
-
-    impl TestComment {
-        #[allow(non_upper_case_globals)]
-        #[allow(dead_code)]
-        const id: Field<Self, i32> = Field::new("id");
-
-        #[allow(non_upper_case_globals)]
-        const post_id: Field<Self, i32> = Field::new("post_id");
-
-        #[allow(non_upper_case_globals)]
-        #[allow(dead_code)]
-        const body: Field<Self, String> = Field::new("body");
-    }
     #[test]
     fn user_query_is_generic() {
         let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
@@ -814,9 +702,6 @@ mod tests {
 
         let relation = &query.statement.relations[0];
 
-        // assert_eq!(relation.from_table, "users");
-        // assert_eq!(relation.from_column.name(), "id");
-
         assert_eq!(relation.to_table, "posts");
         assert_eq!(relation.to_column.name(), "user_id");
     }
@@ -907,7 +792,6 @@ mod tests {
 
         let relation = &query.statement.relations[0];
 
-        // assert_eq!(relation.from_table, "users");
         assert_eq!(relation.to_table, "posts");
     }
     #[test]
@@ -918,59 +802,9 @@ mod tests {
 
         let relation = &query.statement.relations[0];
 
-        // assert_eq!(relation.from_table, "posts");
-        // assert_eq!(relation.from_column.name(), "id");
-
         assert_eq!(relation.to_table, "comments");
         assert_eq!(relation.to_column.name(), "post_id");
     }
-    // #[test]
-    // fn relation_info_foreign_key_condition_works() {
-    //     let relation = TestUser::posts.info();
-
-    //     let expression = relation.foreign_key_condition();
-
-    //     let mut index = 0;
-
-    //     let sql = crate::sql::compile_expression(&expression, &mut index);
-
-    //     assert_eq!(sql, "users.id = posts.user_id");
-    //     assert_eq!(index, 0);
-    // }
-    // #[test]
-    // fn with_relation_stores_relation_info() {
-    //     let query = TestUser::find().with(TestUser::posts);
-
-    //     let relations = query.relation_infos();
-
-    //     assert_eq!(relations.len(), 1);
-    // }
-    // #[test]
-    // fn with_relation_builds_relation_condition() {
-    //     let query = TestUser::find().with(TestUser::posts);
-
-    //     let conditions = query.relation_conditions();
-
-    //     assert_eq!(conditions.len(), 1);
-
-    //     let mut index = 0;
-
-    //     let sql = crate::sql::compile_expression(&conditions[0], &mut index);
-
-    //     assert_eq!(sql, "users.id = posts.user_id");
-    //     assert_eq!(index, 0);
-    // }
-    // #[test]
-    // fn with_relation_exposes_relation_target_metadata() {
-    //     let query = TestUser::find().with(TestUser::posts);
-
-    //     let targets = query.relation_targets();
-
-    //     assert_eq!(targets.len(), 1);
-    //     assert_eq!(targets[0].0, "posts");
-    //     assert_eq!(targets[0].1.name(), "id");
-    //     assert_eq!(targets[0].2.name(), "user_id");
-    // }
     #[test]
     fn in_list_expression_works() {
         let expression = crate::query::expression::Expression::Binary {
@@ -1118,16 +952,34 @@ mod tests {
                 id: 1,
                 name: "Fakhir".to_string(),
                 posts: vec![],
+                profile: None,
+                roles: vec![
+                    Arc::new(TestRoleModel {
+                        id: 1,
+                        name: "Admin".to_string(),
+                    }),
+                    Arc::new(TestRoleModel {
+                        id: 2,
+                        name: "Editor".to_string(),
+                    }),
+                ],
             },
             TestUserModel {
                 id: 2,
                 name: "Ali".to_string(),
                 posts: vec![],
+                profile: None,
+                roles: vec![Arc::new(TestRoleModel {
+                    id: 2,
+                    name: "Editor".to_string(),
+                })],
             },
             TestUserModel {
                 id: 5,
                 name: "Ahmed".to_string(),
                 posts: vec![],
+                profile: None,
+                roles: vec![], // No roles
             },
         ];
 
@@ -1149,5 +1001,70 @@ mod tests {
             BindValue::I64(value) => assert_eq!(*value, 5),
             _ => panic!("expected I64"),
         }
+    }
+    #[test]
+    fn many_to_one_relation_works() {
+        let relation = TestPost::user;
+
+        assert_eq!(relation.info().to_table, "users");
+        assert_eq!(relation.info().to_column.name(), "id");
+    }
+    #[test]
+    fn many_to_one_relation_target_query_works() {
+        let query = TestPost::user.target_query();
+
+        assert_eq!(query.build_sql(), "SELECT id, name FROM users");
+    }
+    #[test]
+    fn many_to_one_relation_target_filter_works() {
+        let relation = TestPost::user.info();
+
+        let query = TestPost::user
+            .target_query()
+            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
+        );
+    }
+    #[test]
+    fn one_to_one_relation_target_filter_works() {
+        let relation = TestUser::profile.info();
+
+        let query = TestUser::profile
+            .target_query()
+            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT id, user_id, bio FROM profiles WHERE profiles.user_id IN ($1, $2)"
+        );
+    }
+    #[test]
+    fn many_to_one_relation_sql_works() {
+        let relation = TestPost::user.info();
+
+        let query = TestPost::user
+            .target_query()
+            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
+        );
+    }
+    #[test]
+    fn many_to_many_relation_sql_works() {
+        let relation = TestUser::roles.info();
+
+        let query = TestUser::roles
+            .target_query()
+            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+        assert_eq!(
+            query.build_sql(),
+            "SELECT id, name FROM roles WHERE roles.id IN ($1, $2)"
+        );
     }
 }

@@ -1,25 +1,133 @@
+use std::sync::Arc;
+
 use rustorm::{
-    entity::{Column, Entity, RelationKey, RelationLoader},
+    entity::{
+        Column,
+        Entity,
+        RelationKey,
+        RelationLoader,
+        SingleRelationLoader,
+    },
     field::Field,
-    query::relation::Relation,
+    query::relation::{ManyToMany, ManyToOne, OneToOne, Relation},  // <-- Added ManyToMany
 };
 
 use sqlx::PgPool;
 use sqlx::types::BigDecimal;
+
+// ============================================================
+// PROFILE
+// ============================================================
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct ProfileModel {
+    pub id: i32,
+    pub user_id: i32,
+    pub bio: String,
+}
+
+pub struct Profile;
+
+impl Entity for Profile {
+    type Model = ProfileModel;
+
+    const TABLE: &'static str = "profiles";
+
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("user_id"),
+        Column::new("bio"),
+    ];
+}
+
+impl Profile {
+    #[allow(non_upper_case_globals)]
+    pub const id: Field<Self, i32> = Field::new("id");
+
+    #[allow(non_upper_case_globals)]
+    pub const user_id: Field<Self, i32> = Field::new("user_id");
+
+    #[allow(non_upper_case_globals)]
+    pub const bio: Field<Self, String> = Field::new("bio");
+}
+
+impl RelationKey for ProfileModel {
+    fn relation_key(&self, column: Column) -> Option<i64> {
+        match column.name() {
+            "id" => Some(self.id as i64),
+            "user_id" => Some(self.user_id as i64),
+            _ => None,
+        }
+    }
+}
+
+// ============================================================
+// ROLE (NEW - Many-to-Many)
+// ============================================================
+
+#[derive(Debug, sqlx::FromRow)]
+pub struct RoleModel {
+    pub id: i32,
+    pub name: String,
+}
+
+pub struct Role;
+
+impl Entity for Role {
+    type Model = RoleModel;
+
+    const TABLE: &'static str = "roles";
+
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("name"),
+    ];
+}
+
+impl Role {
+    #[allow(non_upper_case_globals)]
+    pub const id: Field<Self, i32> = Field::new("id");
+
+    #[allow(non_upper_case_globals)]
+    pub const name: Field<Self, String> = Field::new("name");
+}
+
+impl RelationKey for RoleModel {
+    fn relation_key(&self, column: Column) -> Option<i64> {
+        match column.name() {
+            "id" => Some(self.id as i64),
+            _ => None,
+        }
+    }
+}
+
+// ============================================================
+// USER
+// ============================================================
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct UserModel {
     pub id: i32,
     pub name: String,
 
+    // ONE-TO-MANY
     #[sqlx(skip)]
     pub posts: Vec<PostModel>,
+
+    // ONE-TO-ONE
+    #[sqlx(skip)]
+    pub profile: Option<Arc<ProfileModel>>,
+
+    // MANY-TO-MANY
+    #[sqlx(skip)]
+    pub roles: Vec<Arc<RoleModel>>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
 struct UserCount {
     #[allow(dead_code)]
     name: String,
+
     #[allow(dead_code)]
     count: i64,
 }
@@ -28,6 +136,7 @@ struct UserCount {
 struct UserSum {
     #[allow(dead_code)]
     name: String,
+
     #[allow(dead_code)]
     sum: i64,
 }
@@ -45,7 +154,10 @@ impl Entity for User {
 
     const TABLE: &'static str = "users";
 
-    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("name"),
+    ];
 }
 
 impl User {
@@ -55,8 +167,26 @@ impl User {
     #[allow(non_upper_case_globals)]
     pub const name: Field<Self, String> = Field::new("name");
 
+    // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const posts: Relation<Self, Post> = Relation::new(Self::id, Post::user_id);
+    pub const posts: Relation<Self, Post> =
+        Relation::new(Self::id, Post::user_id);
+
+    // ONE-TO-ONE
+    #[allow(non_upper_case_globals)]
+    pub const profile: Relation<Self, Profile, OneToOne> =
+        Relation::new(Self::id, Profile::user_id);
+
+    // MANY-TO-MANY
+    #[allow(non_upper_case_globals)]
+    pub const roles: Relation<Self, Role, ManyToMany> =
+        Relation::<Self, Role, ManyToMany>::many_to_many(
+            Self::id,
+            Role::id,
+            "user_roles",
+            Column::new("user_id"),
+            Column::new("role_id"),
+        );
 }
 
 impl RelationKey for UserModel {
@@ -74,14 +204,37 @@ impl RelationLoader<PostModel> for UserModel {
     }
 }
 
+// ONE-TO-ONE loader
+impl SingleRelationLoader<Arc<ProfileModel>> for UserModel {
+    fn load_relation(&mut self, related: Option<Arc<ProfileModel>>) {
+        self.profile = related;
+    }
+}
+
+// MANY-TO-MANY loader
+impl RelationLoader<Arc<RoleModel>> for UserModel {
+    fn load_relation(&mut self, related: Vec<Arc<RoleModel>>) {
+        self.roles = related;
+    }
+}
+
+// ============================================================
+// POST
+// ============================================================
+
 #[derive(Debug, sqlx::FromRow)]
 pub struct PostModel {
     pub id: i32,
     pub user_id: i32,
     pub title: String,
 
+    // ONE-TO-MANY
     #[sqlx(skip)]
     pub comments: Vec<CommentModel>,
+
+    // MANY-TO-ONE
+    #[sqlx(skip)]
+    pub user: Option<Arc<UserModel>>,
 }
 
 pub struct Post;
@@ -108,8 +261,15 @@ impl Post {
     #[allow(non_upper_case_globals)]
     pub const title: Field<Self, String> = Field::new("title");
 
+    // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const comments: Relation<Self, Comment> = Relation::new(Self::id, Comment::post_id);
+    pub const comments: Relation<Self, Comment> =
+        Relation::new(Self::id, Comment::post_id);
+
+    // MANY-TO-ONE
+    #[allow(non_upper_case_globals)]
+    pub const user: Relation<Self, User, ManyToOne> =
+        Relation::new(Self::user_id, User::id);
 }
 
 impl RelationKey for PostModel {
@@ -127,6 +287,17 @@ impl RelationLoader<CommentModel> for PostModel {
         self.comments = related;
     }
 }
+
+// MANY-TO-ONE loader
+impl SingleRelationLoader<Arc<UserModel>> for PostModel {
+    fn load_relation(&mut self, related: Option<Arc<UserModel>>) {
+        self.user = related;
+    }
+}
+
+// ============================================================
+// COMMENT
+// ============================================================
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct CommentModel {
@@ -170,15 +341,21 @@ impl RelationKey for CommentModel {
     }
 }
 
+// ============================================================
+// MAIN
+// ============================================================
+
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let db = PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
+    let db =
+        PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
 
     // ------------------------------------------------------------
-    // REAL EAGER LOADING TEST
+    // ONE-TO-MANY
     // ------------------------------------------------------------
 
-    let users_with_posts = User::find().with(User::posts).all(&db).await?;
+    let users_with_posts =
+        User::find().with(User::posts).all(&db).await?;
 
     println!("\n=== USERS WITH POSTS ===");
 
@@ -203,13 +380,17 @@ async fn main() -> Result<(), sqlx::Error> {
     // COUNT
     // ------------------------------------------------------------
 
-    let user_count = User::find().select(User::id.count()).count(&db).await?;
+    let user_count =
+        User::find().select(User::id.count()).count(&db).await?;
 
     // ------------------------------------------------------------
     // POSTS
     // ------------------------------------------------------------
 
-    let posts = Post::find().where_(Post::title.eq("Rust")).all(&db).await?;
+    let posts = Post::find()
+        .where_(Post::title.eq("Rust"))
+        .all(&db)
+        .await?;
 
     // ------------------------------------------------------------
     // COUNT WITH WHERE
@@ -237,7 +418,8 @@ async fn main() -> Result<(), sqlx::Error> {
     // SUM
     // ------------------------------------------------------------
 
-    let user_id_sum = User::find().select(User::id.sum()).count(&db).await?;
+    let user_id_sum =
+        User::find().select(User::id.sum()).count(&db).await?;
 
     let user_id_sum_with_where = User::find()
         .where_(User::name.eq("Fakhir"))
@@ -266,7 +448,14 @@ async fn main() -> Result<(), sqlx::Error> {
         .fetch_all::<UserAvg>(&db)
         .await?;
 
-    let posts_with_comments = Post::find().with(Post::comments).all(&db).await?;
+    // ------------------------------------------------------------
+    // POSTS WITH COMMENTS
+    // ------------------------------------------------------------
+
+    let posts_with_comments =
+        Post::find().with(Post::comments).all(&db).await?;
+
+    println!("\n=== POSTS WITH COMMENTS ===");
 
     for post in &posts_with_comments {
         println!("Post: {} ({})", post.title, post.id);
@@ -275,6 +464,62 @@ async fn main() -> Result<(), sqlx::Error> {
             println!("  Comment: {}", comment.body);
         }
     }
+
+    // ------------------------------------------------------------
+    // MANY-TO-ONE
+    // ------------------------------------------------------------
+
+    let posts_with_users =
+        Post::find().with(Post::user).all(&db).await?;
+
+    println!("\n=== POSTS WITH USERS ===");
+
+    for post in &posts_with_users {
+        println!("Post: {} ({})", post.title, post.id);
+
+        if let Some(user) = &post.user {
+            println!("  User: {} ({})", user.name, user.id);
+        } else {
+            println!("  User: None");
+        }
+    }
+
+    // ------------------------------------------------------------
+    // ONE-TO-ONE
+    // ------------------------------------------------------------
+
+    let users_with_profiles =
+        User::find().with(User::profile).all(&db).await?;
+
+    println!("\n=== USERS WITH PROFILES ===");
+
+    for user in &users_with_profiles {
+        println!("User: {} ({})", user.name, user.id);
+
+        if let Some(profile) = &user.profile {
+            println!("  Profile: {}", profile.bio);
+        } else {
+            println!("  Profile: None");
+        }
+    }
+
+    // ------------------------------------------------------------
+    // MANY-TO-MANY (NEW)
+    // ------------------------------------------------------------
+
+    let users_with_roles =
+        User::find().with(User::roles).all(&db).await?;
+
+    println!("\n=== USERS WITH ROLES ===");
+
+    for user in &users_with_roles {
+        println!("User: {} ({})", user.name, user.id);
+
+        for role in &user.roles {
+            println!("  Role: {} ({})", role.name, role.id);
+        }
+    }
+
     // ------------------------------------------------------------
     // OUTPUT
     // ------------------------------------------------------------
@@ -293,7 +538,9 @@ async fn main() -> Result<(), sqlx::Error> {
 
     println!("\nUser ID sum: {user_id_sum}");
 
-    println!("\nUser ID sum with where: {user_id_sum_with_where}");
+    println!(
+        "\nUser ID sum with where: {user_id_sum_with_where}"
+    );
 
     println!("\nGrouped sums: {grouped_sums:#?}");
 

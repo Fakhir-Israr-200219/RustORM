@@ -211,27 +211,59 @@ kahenge.
 
 
 
+✅ Entity abstraction
+✅ Typed Fields
+✅ Conditions = <> > >= < <=
+✅ AND / OR
+✅ ORDER BY
+✅ LIMIT / OFFSET
+✅ DISTINCT
+✅ GROUP BY
+✅ HAVING
+✅ COUNT / SUM / AVG / MIN / MAX
+✅ Basic subqueries
+✅ JOINs — all major types
+✅ Relation joins
+✅ Multiple joins
+✅ Relation metadata
+✅ IN (...) list expressions
+✅ Bind collection for normal relation IN
+⚠️ Subquery bind propagation — abhi pending
+⚠️ Unified SQL + bind compilation hardening — pending
+⚠️ Proper count() execution semantics — pending
+RELATIONS
+✅ Relation<From, To>
+✅ Relation metadata
+✅ .with()
+✅ Actual eager loading
+✅ Parent-key → child-query loading
+✅ Grouping children by foreign key
+✅ Attaching children to parent
+✅ User → Posts real PostgreSQL test
+✅ Post → Comments real PostgreSQL test
+⬜ Nested .with() — abhi verify/implement karna baqi hai
+
 
 
 CURRENT
    │
    ▼
-JOIN COMPLETE
+JOIN COMPLETE ✅
    │
    ▼
-JOIN TESTS
+JOIN TESTS ✅
    │
    ▼
-QUERY COMPILATION/BINDING HARDEN
+QUERY COMPILATION/BINDING HARDEN ⚠️
    │
    ▼
-RELATION DESIGN
+RELATION DESIGN ✅
    │
    ▼
-WITH
+WITH ✅
    │
    ▼
-CREATE / UPDATE / DELETE
+CREATE / UPDATE / DELETE ⬅️ NEXT MAJOR PHASE
    │
    ▼
 TRANSACTIONS
@@ -245,77 +277,139 @@ CLI
    ▼
 GENERATED ENTITIES
 
-let users = client.user.find_many()
-    .where_(User::name.eq("Fakhir"))
-    .with(User::posts)
-    .take(20)
-    .exec()
-    .await?;
+| Feature    | Status                    |
+| ---------- | ------------------------- |
+| WHERE      | ✅ Done                    |
+| ORDER BY   | ✅ Done                    |
+| LIMIT      | ✅ Done                    |
+| OFFSET     | ✅ Done                    |
+| DISTINCT   | ✅ Done                    |
+| GROUP BY   | ✅ Done                    |
+| HAVING     | ✅ Done                    |
+| INNER JOIN | ✅ Done                    |
+| LEFT JOIN  | ✅ Done                    |
+| RIGHT JOIN | ✅ Done                    |
+| FULL JOIN  | ✅ Done                    |
+| CROSS JOIN | ✅ Done                    |
+| Subquery   | ⚠️ **Basic support done** |
+| CTE        | ⬜ Not done                |
+| UNION      | ⬜ Not done                |
+| FOR UPDATE | ⬜ Not done                |
 
 
-Mera current verdict
+QUERY FEATURES
 
-✅ Entity abstraction
-✅ Typed Field
-✅ Conditions: =, <>, >, >=, <, <=
-✅ AND / OR
-✅ ORDER BY
-✅ LIMIT / OFFSET
-✅ DISTINCT
-✅ GROUP BY
-✅ HAVING
-✅ Aggregates: COUNT/SUM/AVG/MIN/MAX
-✅ Subquery basic support
-✅ INNER / LEFT / RIGHT / FULL / CROSS JOIN
-✅ Relation metadata
-⚠️ WITH abhi actual relation loading nahi karta
-⚠️ Bind handling mein future architectural issue hai
-⚠️ Subquery binds abhi properly propagate nahi hote
-⚠️ count() execution semantics baad mein fix karni hain
-⚠️ CRUD abhi nahi
-⚠️ Executor layer abhi empty
-⚠️ CLI/generator baad mein
-
+WHERE          ✅
+ORDER BY       ✅
+LIMIT          ✅
+OFFSET         ✅
+DISTINCT       ✅
+GROUP BY       ✅
+HAVING         ✅
 
 JOIN
-  ✅ basic joins
-  ✅ relation joins
-  ✅ multiple joins
-  ✅ joins + WHERE
-  ✅ joins + GROUP BY
-  ✅ joins + HAVING
-  ✅ joins + ORDER/LIMIT/OFFSET
-  ✅ 66 tests
+  INNER        ✅
+  LEFT         ✅
+  RIGHT        ✅
+  FULL         ✅
+  CROSS        ✅
+
+SUBQUERY       ⚠️ Basic
+CTE            ⬜
+UNION          ⬜
+FOR UPDATE     ⬜
+
+
 
 RELATIONS
-  ✅ Relation<From, To>
-  ✅ relation metadata
-  ⬅️ NOW: relation metadata hardening
-  ⬜ relation loading design
-  ⬜ WITH execution
-  ⬜ nested WITH
-
-QUERY ENGINE
-  ⬜ fix unified SQL + bind compilation
-  ⬜ subquery bind propagation
-  ⬜ qualified columns
-  ⬜ proper count()
-
+├── One-to-One          ✅
+├── One-to-Many         ✅
+├── Many-to-One         ✅
+├── Many-to-Many        ⬜
+└── Nested Relations    ⬜
+          │
+          ▼
+QUERY ENGINE HARDENING
+├── Subquery binds      ⚠️
+├── Qualified columns   ⬜
+├── Proper count()      ⬜
+          │
+          ▼
+ADVANCED SQL
+├── CTE                 ⬜
+├── UNION               ⬜
+└── FOR UPDATE          ⬜
+          │
+          ▼
 CRUD
-  ⬜ INSERT
-  ⬜ UPDATE
-  ⬜ DELETE
-
+├── INSERT              ⬜
+├── UPDATE              ⬜
+└── DELETE              ⬜
+          │
+          ▼
 RUNTIME
-  ⬜ executor
-  ⬜ transactions
+├── Executor            ⬜
+└── Transactions        ⬜
+          │
+          ▼
+CLI / GENERATOR
+├── schema.rustorm      ⬜
+├── Migrations          ⬜
+├── Generated entities  ⬜
+└── Client generation   ⬜
 
-CLI
-  ⬜ schema.rustorm
-  ⬜ migrations
-  ⬜ entity generation
-  ⬜ client generation
+One-to-Many         ✅ DONE
+       ↓
+Many-to-One         ← NEXT
+       ↓
+One-to-One
+       ↓
+Many-to-Many
+       ↓
+Nested Relations
+       ↓
+Query Engine hardening
+       ↓
+Executor
+       ↓
+Transactions
+       ↓
+CRUD
 
 
 
+CURRENT One-to-Many
+       │
+       ▼
+1. Cardinality markers
+       │
+       ▼
+2. Make Relation<From, To, C>
+       │
+       ▼
+3. Convert existing One-to-Many
+       │
+       ▼
+cargo test
+       │
+       ▼
+4. Add Many-to-One
+       │
+       ▼
+cargo test
+       │
+       ▼
+5. Add One-to-One
+       │
+       ▼
+cargo test
+       │
+       ▼
+6. Design Many-to-Many
+       │
+       ▼
+7. Implement Many-to-Many
+       │
+       ▼
+8. Nested relations
 

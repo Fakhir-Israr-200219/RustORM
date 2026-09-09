@@ -29,14 +29,6 @@ pub(crate) struct RelationInfo {
 }
 
 impl RelationInfo {
-    // pub(crate) fn from_table(&self) -> &'static str {
-    //     self.from_table
-    // }
-
-    // pub(crate) fn from_column(&self) -> Column {
-    //     self.from_column
-    // }
-
     pub(crate) fn to_table(&self) -> &'static str {
         self.to_table
     }
@@ -44,31 +36,6 @@ impl RelationInfo {
     pub(crate) fn to_column(&self) -> Column {
         self.to_column
     }
-
-    // pub(crate) fn foreign_key_condition(&self) -> Expression {
-    //     Expression::Binary {
-    //         left: Box::new(Expression::Column(Column::qualified(
-    //             self.from_table(),
-    //             self.from_column().name(),
-    //         ))),
-    //         operator: BinaryOperator::Eq,
-    //         right: Box::new(Expression::Column(Column::qualified(
-    //             self.to_table(),
-    //             self.to_column().name(),
-    //         ))),
-    //     }
-    // }
-    // pub(crate) fn target_table(&self) -> &'static str {
-    //     self.to_table()
-    // }
-
-    // pub(crate) fn target_column(&self) -> Column {
-    //     self.to_column()
-    // }
-
-    // pub(crate) fn source_column(&self) -> Column {
-    //     self.from_column()
-    // }
 
     pub(crate) fn foreign_key_in(&self, values: Vec<crate::value::BindValue>) -> Expression {
         Expression::Binary {
@@ -111,8 +78,4 @@ impl<E> SelectItem<E> {
         }
     }
 }
-impl<E> SelectStatement<E> {
-    // pub(crate) fn relations(&self) -> &[RelationInfo] {
-    //     &self.relations
-    // }
-}
+

@@ -4,6 +4,10 @@ pub trait RelationLoader<Related> {
     fn load_relation(&mut self, related: Vec<Related>);
 }
 
+pub trait SingleRelationLoader<Related> {
+    fn load_relation(&mut self, related: Option<Related>);
+}
+
 pub trait RelationKey {
     fn relation_key(&self, column: Column) -> Option<i64>;
 }
