@@ -27,17 +27,15 @@ pub(crate) struct Subquery {
 pub(crate) enum Expression {
     Column(Column),
     Value(BindValue),
-
+    List(Vec<Expression>),
     Function {
         function: AggregateFunction,
         expression: Box<Expression>,
     },
-
     Binary {
         left: Box<Expression>,
         operator: BinaryOperator,
         right: Box<Expression>,
     },
-
     Subquery(Subquery),
 }

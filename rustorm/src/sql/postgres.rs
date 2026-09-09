@@ -15,6 +15,15 @@ pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut
             *next_placeholder += 1;
             placeholder
         }
+        Expression::List(expressions) => {
+            let values = expressions
+                .iter()
+                .map(|expression| compile_expression(expression, next_placeholder))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!("({})", values)
+        }
 
         Expression::Binary {
             left,
@@ -90,6 +99,11 @@ pub(crate) fn collect_bind_values(expression: &Expression, values: &mut Vec<Bind
         Expression::Binary { left, right, .. } => {
             collect_bind_values(left, values);
             collect_bind_values(right, values);
+        }
+        Expression::List(expressions) => {
+            for expression in expressions {
+                collect_bind_values(expression, values);
+            }
         }
         Expression::Subquery(_) => {}
     }

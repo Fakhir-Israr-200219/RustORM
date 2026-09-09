@@ -1,5 +1,13 @@
 use crate::query::Query;
 
+pub trait RelationLoader<Related> {
+    fn load_relation(&mut self, related: Vec<Related>);
+}
+
+pub trait RelationKey {
+    fn relation_key(&self, column: Column) -> Option<i64>;
+}
+
 pub trait Entity {
     type Model;
 

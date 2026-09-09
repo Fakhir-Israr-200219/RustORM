@@ -8,12 +8,20 @@ use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStateme
 use crate::sql::{collect_bind_values, compile_expression};
 use crate::value::BindValue;
 
-pub struct Query<E> {
+pub struct NoRelations;
+
+pub struct RelationNode<Rel, Tail> {
+    pub relation: Rel,
+    pub tail: Tail,
+}
+
+pub struct Query<E, R = NoRelations> {
     pub(crate) statement: SelectStatement<E>,
+    pub(crate) relations: R,
     _entity: PhantomData<E>,
 }
 
-impl<E> Query<E>
+impl<E> Query<E, NoRelations>
 where
     E: Entity,
 {
@@ -27,7 +35,6 @@ where
                         _entity: PhantomData,
                     })
                     .collect(),
-
                 table: E::TABLE,
                 joins: Vec::new(),
                 where_clause: None,
@@ -40,23 +47,86 @@ where
                 selected_explicitly: false,
                 relations: Vec::new(),
             },
+            relations: NoRelations,
             _entity: PhantomData,
         }
     }
+}
 
+impl<E, R> Query<E, R>
+where
+    E: Entity,
+{
     pub fn where_(mut self, condition: Condition<E>) -> Self {
         self.statement.where_clause = Some(condition.into_ast());
         self
     }
 
-    pub fn with<To>(mut self, relation: crate::query::relation::Relation<E, To>) -> Self
+    pub fn with<To>(
+        self,
+        relation: crate::query::relation::Relation<E, To>,
+    ) -> Query<E, RelationNode<crate::query::relation::Relation<E, To>, R>>
     where
-        E: Entity,
         To: Entity,
     {
-        self.statement.relations.push(relation.info());
+        Query {
+            statement: {
+                let mut statement = self.statement;
+                statement.relations.push(relation.info());
+                statement
+            },
+            relations: RelationNode {
+                relation,
+                tail: self.relations,
+            },
+            _entity: PhantomData,
+        }
+    }
+
+    pub(crate) fn apply_relation_filter(
+        mut self,
+        relation: &crate::query::statement::RelationInfo,
+        values: Vec<crate::value::BindValue>,
+    ) -> Self {
+        let condition = relation.foreign_key_in(values);
+
+        self.statement.where_clause = match self.statement.where_clause.take() {
+            Some(existing) => Some(crate::query::expression::Expression::Binary {
+                left: Box::new(existing),
+                operator: crate::query::expression::BinaryOperator::And,
+                right: Box::new(condition),
+            }),
+            None => Some(condition),
+        };
+
         self
     }
+
+    // pub(crate) fn relation_infos(&self) -> &[crate::query::statement::RelationInfo] {
+    //     self.statement.relations()
+    // }
+
+    // pub(crate) fn relation_conditions(&self) -> Vec<crate::query::expression::Expression> {
+    //     self.statement
+    //         .relations()
+    //         .iter()
+    //         .map(|relation| relation.foreign_key_condition())
+    //         .collect()
+    // }
+
+    // pub(crate) fn relation_targets(&self) -> Vec<(&'static str, Column, Column)> {
+    //     self.statement
+    //         .relations()
+    //         .iter()
+    //         .map(|relation| {
+    //             (
+    //                 relation.target_table(),
+    //                 relation.source_column(),
+    //                 relation.target_column(),
+    //             )
+    //         })
+    //         .collect()
+    // }
 
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.statement.order_by = Some(order);
@@ -177,7 +247,7 @@ where
 // SQL generation
 //
 
-impl<E> Query<E>
+impl<E, R> Query<E, R>
 where
     E: Entity,
 {
@@ -271,138 +341,131 @@ where
 
         sql
     }
+    pub(crate) fn build_count_sql(&self) -> String {
+        let mut next_placeholder = 1;
+
+        let mut sql = format!("SELECT COUNT(*) FROM {}", self.statement.table);
+
+        for join in &self.statement.joins {
+            match join.join_type {
+                JoinType::Inner => {
+                    sql.push_str(" INNER JOIN ");
+                }
+                JoinType::Left => {
+                    sql.push_str(" LEFT JOIN ");
+                }
+                JoinType::Right => {
+                    sql.push_str(" RIGHT JOIN ");
+                }
+                JoinType::Full => {
+                    sql.push_str(" FULL JOIN ");
+                }
+                JoinType::Cross => {
+                    sql.push_str(" CROSS JOIN ");
+                }
+            }
+
+            sql.push_str(join.table);
+
+            if let Some(on) = &join.on {
+                sql.push_str(" ON ");
+                sql.push_str(&compile_expression(on, &mut next_placeholder));
+            }
+        }
+
+        if let Some(condition) = &self.statement.where_clause {
+            sql.push_str(" WHERE ");
+            sql.push_str(&compile_expression(condition, &mut next_placeholder));
+        }
+
+        sql
+    }
+    pub(crate) fn compile(&self) -> crate::sql::CompiledQuery {
+        let sql = self.build_sql();
+
+        let mut binds = Vec::new();
+
+        if let Some(ref condition) = self.statement.where_clause {
+            crate::sql::collect_bind_values(condition, &mut binds);
+        }
+
+        if let Some(ref condition) = self.statement.having {
+            crate::sql::collect_bind_values(condition, &mut binds);
+        }
+
+        crate::sql::CompiledQuery::new(sql, binds)
+    }
 }
 
-impl<E> Query<E>
+impl<E, R> Query<E, R>
 where
     E: Entity,
+    R: crate::query::relation::RelationLoad<E>,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
     pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<E::Model>, sqlx::Error> {
-        let sql = self.build_sql();
-        let mut query = sqlx::query_as::<_, E::Model>(&sql);
+        let compiled = self.compile();
 
-        if let Some(expression) = &self.statement.where_clause {
-            let mut values = Vec::new();
+        let mut query = sqlx::query_as::<_, E::Model>(&compiled.sql);
 
-            collect_bind_values(expression, &mut values);
-
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
+        for value in compiled.binds {
+            match value {
+                BindValue::String(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::I64(value) => {
+                    query = query.bind(value);
                 }
             }
         }
 
-        if let Some(expression) = &self.statement.having {
-            let mut values = Vec::new();
+        let mut parents = query.fetch_all(db).await?;
 
-            collect_bind_values(expression, &mut values);
+        self.relations.load(db, &mut parents).await?;
 
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
-                }
-            }
-        }
-
-        query.fetch_all(db).await
+        Ok(parents)
     }
     pub async fn count(self, db: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
-        let sql = self.build_sql();
+        let sql = self.build_count_sql();
 
-        let mut query = sqlx::query_scalar::<_, i64>(&sql);
+        let mut binds = Vec::new();
 
         if let Some(expression) = &self.statement.where_clause {
-            let mut values = Vec::new();
-
-            collect_bind_values(expression, &mut values);
-
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
-                }
-            }
+            collect_bind_values(expression, &mut binds);
         }
 
-        if let Some(expression) = &self.statement.having {
-            let mut values = Vec::new();
+        let compiled = crate::sql::CompiledQuery::new(sql, binds);
 
-            collect_bind_values(expression, &mut values);
+        let mut query = sqlx::query_scalar::<_, i64>(&compiled.sql);
 
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
+        for value in compiled.binds {
+            match value {
+                BindValue::String(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::I64(value) => {
+                    query = query.bind(value);
                 }
             }
         }
 
         query.fetch_one(db).await
     }
-    pub async fn fetch_all<R>(self, db: &sqlx::PgPool) -> Result<Vec<R>, sqlx::Error>
+    pub async fn fetch_all<M>(self, db: &sqlx::PgPool) -> Result<Vec<M>, sqlx::Error>
     where
-        for<'r> R: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+        for<'r> M: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
     {
-        let sql = self.build_sql();
+        let compiled = self.compile();
 
-        let mut query = sqlx::query_as::<_, R>(&sql);
+        let mut query = sqlx::query_as::<_, M>(&compiled.sql);
 
-        if let Some(expression) = &self.statement.where_clause {
-            let mut values = Vec::new();
-
-            collect_bind_values(expression, &mut values);
-
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
+        for value in compiled.binds {
+            match value {
+                BindValue::String(value) => {
+                    query = query.bind(value);
                 }
-            }
-        }
-
-        if let Some(expression) = &self.statement.having {
-            let mut values = Vec::new();
-
-            collect_bind_values(expression, &mut values);
-
-            for value in values {
-                match value {
-                    BindValue::String(value) => {
-                        query = query.bind(value);
-                    }
-
-                    BindValue::I64(value) => {
-                        query = query.bind(value);
-                    }
+                BindValue::I64(value) => {
+                    query = query.bind(value);
                 }
             }
         }

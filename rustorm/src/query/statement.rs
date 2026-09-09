@@ -2,12 +2,9 @@ use std::marker::PhantomData;
 
 use crate::entity::Column;
 use crate::query::condition::Condition;
-use crate::query::expression::{
-    BinaryOperator,
-    Expression,
-};
-use crate::value::BindValue;
+use crate::query::expression::{BinaryOperator, Expression};
 use crate::query::join::Join;
+use crate::value::BindValue;
 
 pub struct SelectStatement<E> {
     pub(crate) columns: Vec<SelectItem<E>>,
@@ -25,10 +22,66 @@ pub struct SelectStatement<E> {
 }
 
 pub(crate) struct RelationInfo {
-    pub(crate) from_table: &'static str,
-    pub(crate) from_column: Column,
+    // pub(crate) from_table: &'static str,
+    // pub(crate) from_column: Column,
     pub(crate) to_table: &'static str,
     pub(crate) to_column: Column,
+}
+
+impl RelationInfo {
+    // pub(crate) fn from_table(&self) -> &'static str {
+    //     self.from_table
+    // }
+
+    // pub(crate) fn from_column(&self) -> Column {
+    //     self.from_column
+    // }
+
+    pub(crate) fn to_table(&self) -> &'static str {
+        self.to_table
+    }
+
+    pub(crate) fn to_column(&self) -> Column {
+        self.to_column
+    }
+
+    // pub(crate) fn foreign_key_condition(&self) -> Expression {
+    //     Expression::Binary {
+    //         left: Box::new(Expression::Column(Column::qualified(
+    //             self.from_table(),
+    //             self.from_column().name(),
+    //         ))),
+    //         operator: BinaryOperator::Eq,
+    //         right: Box::new(Expression::Column(Column::qualified(
+    //             self.to_table(),
+    //             self.to_column().name(),
+    //         ))),
+    //     }
+    // }
+    // pub(crate) fn target_table(&self) -> &'static str {
+    //     self.to_table()
+    // }
+
+    // pub(crate) fn target_column(&self) -> Column {
+    //     self.to_column()
+    // }
+
+    // pub(crate) fn source_column(&self) -> Column {
+    //     self.from_column()
+    // }
+
+    pub(crate) fn foreign_key_in(&self, values: Vec<crate::value::BindValue>) -> Expression {
+        Expression::Binary {
+            left: Box::new(Expression::Column(Column::qualified(
+                self.to_table(),
+                self.to_column().name(),
+            ))),
+            operator: BinaryOperator::In,
+            right: Box::new(Expression::List(
+                values.into_iter().map(Expression::Value).collect(),
+            )),
+        }
+    }
 }
 
 pub enum OrderDirection {
@@ -57,4 +110,9 @@ impl<E> SelectItem<E> {
             _entity: PhantomData,
         }
     }
+}
+impl<E> SelectStatement<E> {
+    // pub(crate) fn relations(&self) -> &[RelationInfo] {
+    //     &self.relations
+    // }
 }

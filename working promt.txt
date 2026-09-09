@@ -213,208 +213,109 @@ kahenge.
 
 
 
+CURRENT
+   │
+   ▼
+JOIN COMPLETE
+   │
+   ▼
+JOIN TESTS
+   │
+   ▼
+QUERY COMPILATION/BINDING HARDEN
+   │
+   ▼
+RELATION DESIGN
+   │
+   ▼
+WITH
+   │
+   ▼
+CREATE / UPDATE / DELETE
+   │
+   ▼
+TRANSACTIONS
+   │
+   ▼
+EXECUTOR
+   │
+   ▼
+CLI
+   │
+   ▼
+GENERATED ENTITIES
 
-
-////////////////////////////////// promt
-Bhai, hum RustORM project par kaam continue kar rahe hain.
-
-Project:
-`G:\Rust-ORM\rustorm`
-
-Goal:
-Prisma/Drizzle/TypeORM-style easy Rust ORM banana hai, especially Axum users ke liye. ORM toy project nahi hona chahiye; architecture clean, scalable aur production-oriented rakhni hai.
-
-IMPORTANT:
-
-* Ek waqt mein chhota step do.
-* Mujhe exact file + exact code changes do.
-* Main change kar ke `cargo check` / `cargo test` chalaunga aur output tumhein dunga.
-* Jab tak main output na doon, unnecessary next changes mat do.
-* Existing architecture ko bina reason refactor mat karo.
-* Relations aur JOIN ko mix mat karna.
-* CTE (`WITH`) aur relation `.with()` ko mix mat karna.
-
-CURRENT STATUS:
-
-`cargo test`:
-62 passed
-0 failed
-
-Implemented query-builder features:
-
-* WHERE
-* ORDER BY
-* LIMIT
-* OFFSET
-* DISTINCT
-* GROUP BY
-* HAVING
-* INNER JOIN
-* LEFT JOIN
-* RIGHT JOIN
-* FULL JOIN
-* CROSS JOIN
-* multiple JOINs
-* relation-based JOIN
-* WHERE IN (subquery)
-* complex subquery SQL generation
-
-Current relation foundation:
-
-```rust
-TestUser::posts
-```
-
-is:
-
-```text
-users.id → posts.user_id
-```
-
-`Relation<From, To>` already exists.
-
-Current JOIN API:
-
-```rust
-TestUser::find()
-    .inner_join(TestUser::posts)
-```
-
-Current planned relation API:
-
-```rust
-TestUser::find()
-    .with(TestUser::posts)
-```
-
-IMPORTANT distinction:
-
-`.inner_join(...)`
-= SQL JOIN/query-builder functionality.
-
-`.with(...)`
-= future relation eager-loading functionality.
-
-`.with(...)` must NOT simply become a JOIN.
-
-CURRENT `.with()` FOUNDATION:
-
-`Query` has:
-
-```rust
-pub fn with<To>(
-    mut self,
-    relation: crate::query::relation::Relation<E, To>,
-) -> Self
-where
-    E: Entity,
-    To: Entity,
-{
-    self.statement.relations.push(relation.info());
-    self
-}
-```
-
-`SelectStatement` has:
-
-```rust
-pub(crate) relations: Vec<RelationInfo>,
-```
-
-and:
-
-```rust
-pub(crate) struct RelationInfo {
-    pub(crate) from_table: &'static str,
-    pub(crate) from_column: Column,
-    pub(crate) to_table: &'static str,
-    pub(crate) to_column: Column,
-}
-```
-
-`Relation::info()` produces:
-
-```text
-from_table  = users
-from_column = id
-to_table    = posts
-to_column   = user_id
-```
-
-Current test:
-
-```rust
-#[test]
-fn with_relation_works() {
-    let query = TestUser::find()
-        .with(TestUser::posts);
-
-    assert_eq!(query.statement.relations.len(), 1);
-
-    let relation = &query.statement.relations[0];
-
-    assert_eq!(relation.from_table, "users");
-    assert_eq!(relation.from_column.name(), "id");
-
-    assert_eq!(relation.to_table, "posts");
-    assert_eq!(relation.to_column.name(), "user_id");
-}
-```
-
-This passes.
-
-CURRENT WARNING:
-
-`cargo check` reports that `RelationInfo` fields are never read.
-
-This is EXPECTED for now because the metadata is stored but no real relation planner/loading logic consumes it yet.
-
-DO NOT simply add `#[allow(dead_code)]`.
-
-NEXT TASK:
-
-Build the **Relation Planner** for `.with()`.
-
-The goal is eventually:
-
-```rust
-TestUser::find()
-    .with(TestUser::posts)
-    .all(&db)
+let users = client.user.find_many()
+    .where_(User::name.eq("Fakhir"))
+    .with(User::posts)
+    .take(20)
+    .exec()
     .await?;
-```
 
-to actually load related records.
 
-But proceed incrementally.
+Mera current verdict
 
-First design/build the relation planning layer using the existing `RelationInfo`.
+✅ Entity abstraction
+✅ Typed Field
+✅ Conditions: =, <>, >, >=, <, <=
+✅ AND / OR
+✅ ORDER BY
+✅ LIMIT / OFFSET
+✅ DISTINCT
+✅ GROUP BY
+✅ HAVING
+✅ Aggregates: COUNT/SUM/AVG/MIN/MAX
+✅ Subquery basic support
+✅ INNER / LEFT / RIGHT / FULL / CROSS JOIN
+✅ Relation metadata
+⚠️ WITH abhi actual relation loading nahi karta
+⚠️ Bind handling mein future architectural issue hai
+⚠️ Subquery binds abhi properly propagate nahi hote
+⚠️ count() execution semantics baad mein fix karni hain
+⚠️ CRUD abhi nahi
+⚠️ Executor layer abhi empty
+⚠️ CLI/generator baad mein
 
-Do NOT immediately modify the database schema.
 
-Current actual database:
+JOIN
+  ✅ basic joins
+  ✅ relation joins
+  ✅ multiple joins
+  ✅ joins + WHERE
+  ✅ joins + GROUP BY
+  ✅ joins + HAVING
+  ✅ joins + ORDER/LIMIT/OFFSET
+  ✅ 66 tests
 
-```sql
-CREATE TABLE posts (
-    id SERIAL PRIMARY KEY,
-    title TEXT NOT NULL
-);
+RELATIONS
+  ✅ Relation<From, To>
+  ✅ relation metadata
+  ⬅️ NOW: relation metadata hardening
+  ⬜ relation loading design
+  ⬜ WITH execution
+  ⬜ nested WITH
 
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL
-);
-```
+QUERY ENGINE
+  ⬜ fix unified SQL + bind compilation
+  ⬜ subquery bind propagation
+  ⬜ qualified columns
+  ⬜ proper count()
 
-IMPORTANT:
-The current DB does NOT have `posts.user_id`, and there is no `comments` table. Relation metadata is currently being tested independently from the actual DB schema.
+CRUD
+  ⬜ INSERT
+  ⬜ UPDATE
+  ⬜ DELETE
 
-So first build the planner/architecture and tests without requiring actual DB relation loading.
+RUNTIME
+  ⬜ executor
+  ⬜ transactions
 
-Also remember:
-The current `Subquery { sql: String }` implementation is only a temporary/basic foundation. Parameterized subquery binding propagation still needs proper architecture later.
+CLI
+  ⬜ schema.rustorm
+  ⬜ migrations
+  ⬜ entity generation
+  ⬜ client generation
 
-Start from the Relation Planner.
-Do not jump ahead to unrelated features.
 
-////////////////////////////////// promt
+
+
