@@ -413,3 +413,92 @@ cargo test
        ▼
 8. Nested relations
 
+
+
+QUERY ENGINE
+├── WHERE                 ✅
+├── ORDER BY              ✅
+├── LIMIT / OFFSET        ✅
+├── DISTINCT              ✅
+├── GROUP BY              ✅
+├── HAVING                ✅
+├── Aggregates            ✅
+├── JOINs                 ✅
+├── Relation joins        ✅
+├── Multiple joins        ✅
+├── Basic subqueries      ⚠️
+└── IN expressions        ✅
+
+RELATIONS
+├── One-to-Many            ✅
+├── Many-to-One            ✅
+├── One-to-One             ✅
+├── Many-to-Many           ✅
+└── Nested .with()         ⬜  ← NEXT
+
+QUERY ENGINE HARDENING
+├── Subquery bind propagation       ⚠️
+├── Unified SQL + bind compilation  ⚠️
+├── Qualified columns               ⬜
+└── Proper count() execution       ⬜
+
+ADVANCED SQL
+├── CTE                    ⬜
+├── UNION                  ⬜
+└── FOR UPDATE             ⬜
+
+CRUD
+├── INSERT                 ⬜
+├── UPDATE                 ⬜
+└── DELETE                 ⬜
+
+RUNTIME
+├── Executor               ⬜
+└── Transactions           ⬜
+
+CLI / GENERATOR
+├── schema.rustorm         ⬜
+├── Migrations             ⬜
+├── Generated entities     ⬜
+└── Client generation      ⬜
+
+
+// One-to-Many → One-to-Many
+User::find()
+    .with(User::posts.with(Post::comments))
+
+// One-to-Many → Many-to-One
+User::find()
+    .with(User::posts.with(Post::user))
+
+// One-to-One → ...
+User::find()
+    .with(User::profile.with(Profile::user))
+
+// Many-to-Many → ...
+User::find()
+    .with(User::roles.with(Role::permissions))
+
+One-to-Many
+    └── Many-to-One
+        └── One-to-One
+            └── Many-to-Many
+
+User
+ └── posts
+      └── comments
+           └── user
+
+Phir har node ki apni RelationLoad implementation decide karegi ke:
+
+One-to-Many kaise load karna hai
+Many-to-One kaise load karna hai
+One-to-One kaise load karna hai
+Many-to-Many kaise load karna hai
+
+
+Aur test sirf:
+User::find()
+    .with(User::posts.with(Post::comments))
+
+

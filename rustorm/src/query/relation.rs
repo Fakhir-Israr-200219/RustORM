@@ -1,8 +1,8 @@
+use sqlx::Row;
+use sqlx::postgres::PgRow;
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::Arc;
-use sqlx::postgres::PgRow;
-use sqlx::Row;
 
 use crate::entity::{Column, Entity, RelationKey, RelationLoader, SingleRelationLoader};
 use crate::field::Field;
@@ -221,7 +221,7 @@ where
             .join(", ");
 
         let sql = format!(
-            "SELECT {} AS from_id, {} AS to_id FROM {} WHERE {} IN ({})",
+            "SELECT {}::BIGINT AS from_id, {}::BIGINT AS to_id FROM {} WHERE {} IN ({})",
             pivot_from.name(),
             pivot_to.name(),
             pivot_table,
