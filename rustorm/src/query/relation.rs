@@ -1,19 +1,26 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
+
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::entity::{Column, Entity, RelationKey, RelationLoader, SingleRelationLoader};
+use crate::entity::{
+    Column, Entity, RelationAccess, RelationKey, RelationLoader, SingleRelationLoader,
+};
+
 use crate::field::Field;
-use crate::query::Query;
 use crate::query::join::{JoinCondition, JoinTarget};
-use crate::query::query::{NoRelations, RelationNode};
+use crate::query::query::{NoRelations, Query, RelationNode};
 
 pub struct OneToMany;
 pub struct ManyToOne;
 pub struct OneToOne;
 pub struct ManyToMany;
+
+// ============================================================
+// Root relation loading (chained .with() on Query)
+// ============================================================
 
 pub trait RelationLoad<E>
 where
@@ -22,9 +29,13 @@ where
     fn load(
         &self,
         db: &sqlx::PgPool,
-        parents: &mut [E::Model],
+        parents: &mut [&mut E::Model],
     ) -> impl std::future::Future<Output = Result<(), sqlx::Error>>;
 }
+
+// ------------------------------------------------------------
+// No relations
+// ------------------------------------------------------------
 
 impl<E> RelationLoad<E> for NoRelations
 where
@@ -33,30 +44,73 @@ where
     fn load(
         &self,
         _db: &sqlx::PgPool,
-        _parents: &mut [E::Model],
+        _parents: &mut [&mut E::Model],
     ) -> impl std::future::Future<Output = Result<(), sqlx::Error>> {
         async { Ok(()) }
     }
 }
 
+// ------------------------------------------------------------
+// Helper: collect parent keys from &mut [&mut Model]
+// ------------------------------------------------------------
+
+fn collect_parent_keys<From, To, C>(
+    relation: &Relation<From, To, C>,
+    parents: &[&mut From::Model],
+) -> Vec<crate::value::BindValue>
+where
+    From: Entity,
+    To: Entity,
+    From::Model: RelationKey,
+{
+    parents
+        .iter()
+        .filter_map(|parent| relation.parent_key(parent))
+        .map(crate::value::BindValue::I64)
+        .collect()
+}
+
+fn collect_parent_keys_i64<From, To, C>(
+    relation: &Relation<From, To, C>,
+    parents: &[&mut From::Model],
+) -> Vec<i64>
+where
+    From: Entity,
+    To: Entity,
+    From::Model: RelationKey,
+{
+    parents
+        .iter()
+        .filter_map(|parent| relation.parent_key(parent))
+        .collect()
+}
+
+// ------------------------------------------------------------
+// OneToMany — NESTED SUPPORT
+// ------------------------------------------------------------
+
 impl<From, To, Tail> RelationLoad<From> for RelationNode<Relation<From, To, OneToMany>, Tail>
 where
     From: Entity,
     To: Entity,
-    From::Model: RelationKey + RelationLoader<To::Model>,
+    From::Model: RelationKey + RelationLoader<To::Model> + RelationAccess<To::Model>,
     To::Model: RelationKey + for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
-    Tail: RelationLoad<From>,
+    Tail: RelationLoad<To>,
 {
     async fn load(
         &self,
         db: &sqlx::PgPool,
-        parents: &mut [From::Model],
+        parents: &mut [&mut From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
-            return self.tail.load(db, parents).await;
+            return Ok(());
         }
 
-        let values = self.relation.parent_key_values(parents);
+        let values = collect_parent_keys(&self.relation, parents);
+
+        if values.is_empty() {
+            return Ok(());
+        }
 
         let child_query = self
             .relation
@@ -81,9 +135,22 @@ where
             }
         }
 
-        self.tail.load(db, parents).await
+        // Recursive nested load — inline, no helper
+        let mut nested_parents: Vec<&mut To::Model> = Vec::new();
+
+        for parent in parents.iter_mut() {
+            for child in parent.related_mut().iter_mut() {
+                nested_parents.push(child);
+            }
+        }
+
+        self.tail.load(db, &mut nested_parents).await
     }
 }
+
+// ------------------------------------------------------------
+// ManyToOne — NO NESTED (old behaviour)
+// ------------------------------------------------------------
 
 impl<From, To, Tail> RelationLoad<From> for RelationNode<Relation<From, To, ManyToOne>, Tail>
 where
@@ -96,13 +163,17 @@ where
     async fn load(
         &self,
         db: &sqlx::PgPool,
-        parents: &mut [From::Model],
+        parents: &mut [&mut From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
-            return self.tail.load(db, parents).await;
+            return Ok(());
         }
 
-        let values = self.relation.parent_key_values(parents);
+        let values = collect_parent_keys(&self.relation, parents);
+
+        if values.is_empty() {
+            return Ok(());
+        }
 
         let child_query = self
             .relation
@@ -131,6 +202,11 @@ where
         self.tail.load(db, parents).await
     }
 }
+
+// ------------------------------------------------------------
+// OneToOne — NO NESTED (old behaviour)
+// ------------------------------------------------------------
+
 impl<From, To, Tail> RelationLoad<From> for RelationNode<Relation<From, To, OneToOne>, Tail>
 where
     From: Entity,
@@ -142,13 +218,17 @@ where
     async fn load(
         &self,
         db: &sqlx::PgPool,
-        parents: &mut [From::Model],
+        parents: &mut [&mut From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
-            return self.tail.load(db, parents).await;
+            return Ok(());
         }
 
-        let values = self.relation.parent_key_values(parents);
+        let values = collect_parent_keys(&self.relation, parents);
+
+        if values.is_empty() {
+            return Ok(());
+        }
 
         let child_query = self
             .relation
@@ -177,6 +257,11 @@ where
         self.tail.load(db, parents).await
     }
 }
+
+// ------------------------------------------------------------
+// ManyToMany — NO NESTED (old behaviour)
+// ------------------------------------------------------------
+
 impl<From, To, Tail> RelationLoad<From> for RelationNode<Relation<From, To, ManyToMany>, Tail>
 where
     From: Entity,
@@ -188,10 +273,10 @@ where
     async fn load(
         &self,
         db: &sqlx::PgPool,
-        parents: &mut [From::Model],
+        parents: &mut [&mut From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
-            return self.tail.load(db, parents).await;
+            return Ok(());
         }
 
         let pivot_table = self
@@ -209,10 +294,10 @@ where
             .pivot_to
             .expect("ManyToMany relation requires pivot to column");
 
-        let parent_keys = self.relation.parent_keys(parents);
+        let parent_keys = collect_parent_keys_i64(&self.relation, parents);
 
         if parent_keys.is_empty() {
-            return self.tail.load(db, parents).await;
+            return Ok(());
         }
 
         let placeholders = (1..=parent_keys.len())
@@ -221,7 +306,9 @@ where
             .join(", ");
 
         let sql = format!(
-            "SELECT {}::BIGINT AS from_id, {}::BIGINT AS to_id FROM {} WHERE {} IN ({})",
+            "SELECT {}::BIGINT AS from_id, {}::BIGINT AS to_id \
+             FROM {} \
+             WHERE {} IN ({})",
             pivot_from.name(),
             pivot_to.name(),
             pivot_table,
@@ -294,17 +381,21 @@ where
     }
 }
 
+// ============================================================
+// Relation
+// ============================================================
+
 pub struct Relation<From, To, C = OneToMany>
 where
     From: Entity,
     To: Entity,
 {
-    from: Column,
-    to: Column,
+    pub(crate) from: Column,
+    pub(crate) to: Column,
 
-    pivot_table: Option<&'static str>,
-    pivot_from: Option<Column>,
-    pivot_to: Option<Column>,
+    pub(crate) pivot_table: Option<&'static str>,
+    pub(crate) pivot_from: Option<Column>,
+    pub(crate) pivot_to: Option<Column>,
 
     _from: PhantomData<From>,
     _to: PhantomData<To>,
@@ -320,11 +411,9 @@ where
         Self {
             from: from.column(),
             to: to.column(),
-
             pivot_table: None,
             pivot_from: None,
             pivot_to: None,
-
             _from: PhantomData,
             _to: PhantomData,
             _cardinality: PhantomData,
@@ -355,12 +444,14 @@ where
     {
         parent.load_relation(related);
     }
+
     pub fn attach_shared(&self, parent: &mut From::Model, related: Vec<Arc<To::Model>>)
     where
         From::Model: RelationLoader<Arc<To::Model>>,
     {
         parent.load_relation(related);
     }
+
     pub fn parent_key(&self, parent: &From::Model) -> Option<i64>
     where
         From::Model: RelationKey,
@@ -385,15 +476,6 @@ where
             .collect()
     }
 
-    pub(crate) fn parent_key_values(&self, parents: &[From::Model]) -> Vec<crate::value::BindValue>
-    where
-        From::Model: RelationKey,
-    {
-        self.parent_keys(parents)
-            .into_iter()
-            .map(crate::value::BindValue::I64)
-            .collect()
-    }
     pub const fn many_to_many<T>(
         from: Field<From, T>,
         to: Field<To, T>,
@@ -404,17 +486,39 @@ where
         Relation {
             from: from.column(),
             to: to.column(),
-
             pivot_table: Some(pivot_table),
             pivot_from: Some(pivot_from),
             pivot_to: Some(pivot_to),
-
             _from: PhantomData,
             _to: PhantomData,
             _cardinality: PhantomData,
         }
     }
+
+    // --------------------------------------------------------
+    // Nested relation
+    // --------------------------------------------------------
+
+    pub fn with<NextTo, NextC>(
+        self,
+        relation: Relation<To, NextTo, NextC>,
+    ) -> RelationNode<Self, RelationNode<Relation<To, NextTo, NextC>, NoRelations>>
+    where
+        NextTo: Entity,
+    {
+        RelationNode {
+            relation: self,
+            tail: RelationNode {
+                relation,
+                tail: NoRelations,
+            },
+        }
+    }
 }
+
+// ============================================================
+// JoinTarget
+// ============================================================
 
 impl<From, To, C> JoinTarget for Relation<From, To, C>
 where

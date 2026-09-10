@@ -501,4 +501,53 @@ Aur test sirf:
 User::find()
     .with(User::posts.with(Post::comments))
 
+Query<User>
+    |
+    +-- User::posts
+           |
+           +-- Post::comments
+                  |
+                  +-- Comment::user
 
+
+
+Phase 1: OneToMany Nested (Abhi ✅)
+✅ User::find().with(User::posts.with(Post::comments)) compile
+
+⬜ Real DB test ← Yahan ho abhi
+
+⬜ Verify: comments actually load hue?
+
+Phase 2: Baqi 3 Cardinalities Nested Support
+⬜ ManyToOne mein nested (Post::find().with(Post::user.with(...)))
+
+⬜ OneToOne mein nested
+
+⬜ ManyToMany mein nested
+
+Phase 3: Mix Cardinalities Nested
+⬜ OneToMany → ManyToOne (User::posts.with(Post::user))
+
+⬜ OneToMany → OneToOne
+
+⬜ ManyToMany → ManyToMany
+
+Phase 4: Chained .with() + Nested Dono
+⬜ User::find().with(User::posts.with(Post::comments)).with(User::profile) — abhi discard ho jayega second .with() se
+
+Phase 5: Real-World Features
+⬜ Deep nesting (Comment::user etc)
+
+⬜ Pagination on relations
+
+⬜ Filters on relations
+
+⬜ Eager vs Lazy loading
+
+
+
+Phase 1: OneToMany Nested        ████████████ 100% ✅
+Phase 2: 4 Cardinalities Nested  ████░░░░░░░░  25% (sirf OneToMany)
+Phase 3: Mix Cardinalities       ██░░░░░░░░░░  15% (OneToMany→OneToMany)
+Phase 4: Chained + Nested        ░░░░░░░░░░░░   0%
+Phase 5: Real-World Features     ░░░░░░░░░░░░   0%

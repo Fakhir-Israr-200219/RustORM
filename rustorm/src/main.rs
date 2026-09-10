@@ -1,15 +1,9 @@
 use std::sync::Arc;
 
 use rustorm::{
-    entity::{
-        Column,
-        Entity,
-        RelationKey,
-        RelationLoader,
-        SingleRelationLoader,
-    },
+    entity::{Column, Entity, RelationAccess, RelationKey, RelationLoader, SingleRelationLoader},
     field::Field,
-    query::relation::{ManyToMany, ManyToOne, OneToOne, Relation},  // <-- Added ManyToMany
+    query::relation::{ManyToMany, ManyToOne, OneToOne, Relation}, // <-- Added ManyToMany
 };
 
 use sqlx::PgPool;
@@ -18,6 +12,24 @@ use sqlx::types::BigDecimal;
 // ============================================================
 // PROFILE
 // ============================================================
+
+impl RelationAccess<PostModel> for UserModel {
+    fn related(&self) -> &[PostModel] {
+        &self.posts
+    }
+    fn related_mut(&mut self) -> &mut [PostModel] {
+        &mut self.posts
+    }
+}
+
+impl RelationAccess<CommentModel> for PostModel {
+    fn related(&self) -> &[CommentModel] {
+        &self.comments
+    }
+    fn related_mut(&mut self) -> &mut [CommentModel] {
+        &mut self.comments
+    }
+}
 
 #[derive(Debug, sqlx::FromRow)]
 pub struct ProfileModel {
@@ -78,10 +90,7 @@ impl Entity for Role {
 
     const TABLE: &'static str = "roles";
 
-    const COLUMNS: &'static [Column] = &[
-        Column::new("id"),
-        Column::new("name"),
-    ];
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl Role {
@@ -154,10 +163,7 @@ impl Entity for User {
 
     const TABLE: &'static str = "users";
 
-    const COLUMNS: &'static [Column] = &[
-        Column::new("id"),
-        Column::new("name"),
-    ];
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl User {
@@ -169,8 +175,7 @@ impl User {
 
     // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const posts: Relation<Self, Post> =
-        Relation::new(Self::id, Post::user_id);
+    pub const posts: Relation<Self, Post> = Relation::new(Self::id, Post::user_id);
 
     // ONE-TO-ONE
     #[allow(non_upper_case_globals)]
@@ -263,13 +268,11 @@ impl Post {
 
     // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const comments: Relation<Self, Comment> =
-        Relation::new(Self::id, Comment::post_id);
+    pub const comments: Relation<Self, Comment> = Relation::new(Self::id, Comment::post_id);
 
     // MANY-TO-ONE
     #[allow(non_upper_case_globals)]
-    pub const user: Relation<Self, User, ManyToOne> =
-        Relation::new(Self::user_id, User::id);
+    pub const user: Relation<Self, User, ManyToOne> = Relation::new(Self::user_id, User::id);
 }
 
 impl RelationKey for PostModel {
@@ -347,15 +350,13 @@ impl RelationKey for CommentModel {
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let db =
-        PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
+    let db = PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
 
     // ------------------------------------------------------------
     // ONE-TO-MANY
     // ------------------------------------------------------------
 
-    let users_with_posts =
-        User::find().with(User::posts).all(&db).await?;
+    let users_with_posts = User::find().with(User::posts).all(&db).await?;
 
     println!("\n=== USERS WITH POSTS ===");
 
@@ -380,17 +381,13 @@ async fn main() -> Result<(), sqlx::Error> {
     // COUNT
     // ------------------------------------------------------------
 
-    let user_count =
-        User::find().select(User::id.count()).count(&db).await?;
+    let user_count = User::find().select(User::id.count()).count(&db).await?;
 
     // ------------------------------------------------------------
     // POSTS
     // ------------------------------------------------------------
 
-    let posts = Post::find()
-        .where_(Post::title.eq("Rust"))
-        .all(&db)
-        .await?;
+    let posts = Post::find().where_(Post::title.eq("Rust")).all(&db).await?;
 
     // ------------------------------------------------------------
     // COUNT WITH WHERE
@@ -418,8 +415,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // SUM
     // ------------------------------------------------------------
 
-    let user_id_sum =
-        User::find().select(User::id.sum()).count(&db).await?;
+    let user_id_sum = User::find().select(User::id.sum()).count(&db).await?;
 
     let user_id_sum_with_where = User::find()
         .where_(User::name.eq("Fakhir"))
@@ -452,8 +448,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // POSTS WITH COMMENTS
     // ------------------------------------------------------------
 
-    let posts_with_comments =
-        Post::find().with(Post::comments).all(&db).await?;
+    let posts_with_comments = Post::find().with(Post::comments).all(&db).await?;
 
     println!("\n=== POSTS WITH COMMENTS ===");
 
@@ -469,8 +464,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // MANY-TO-ONE
     // ------------------------------------------------------------
 
-    let posts_with_users =
-        Post::find().with(Post::user).all(&db).await?;
+    let posts_with_users = Post::find().with(Post::user).all(&db).await?;
 
     println!("\n=== POSTS WITH USERS ===");
 
@@ -488,8 +482,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // ONE-TO-ONE
     // ------------------------------------------------------------
 
-    let users_with_profiles =
-        User::find().with(User::profile).all(&db).await?;
+    let users_with_profiles = User::find().with(User::profile).all(&db).await?;
 
     println!("\n=== USERS WITH PROFILES ===");
 
@@ -507,8 +500,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // MANY-TO-MANY (NEW)
     // ------------------------------------------------------------
 
-    let users_with_roles =
-        User::find().with(User::roles).all(&db).await?;
+    let users_with_roles = User::find().with(User::roles).all(&db).await?;
 
     println!("\n=== USERS WITH ROLES ===");
 
@@ -517,6 +509,18 @@ async fn main() -> Result<(), sqlx::Error> {
 
         for role in &user.roles {
             println!("  Role: {} ({})", role.name, role.id);
+        }
+    }
+    let users_with_nested_with = User::find()
+        .with(User::posts.with(Post::comments))
+        .all(&db)
+        .await?;
+
+    println!("Users: {}", users_with_nested_with.len());
+    for user in &users_with_nested_with {
+        println!(" =================>User: {} (posts: {})", user.name, user.posts.len());
+        for post in &user.posts {
+            println!(" =================> Post: {} (comments: {})", post.title, post.comments.len());
         }
     }
 
@@ -538,9 +542,7 @@ async fn main() -> Result<(), sqlx::Error> {
 
     println!("\nUser ID sum: {user_id_sum}");
 
-    println!(
-        "\nUser ID sum with where: {user_id_sum_with_where}"
-    );
+    println!("\nUser ID sum with where: {user_id_sum_with_where}");
 
     println!("\nGrouped sums: {grouped_sums:#?}");
 

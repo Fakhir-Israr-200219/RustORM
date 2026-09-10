@@ -1,4 +1,4 @@
-use crate::entity::{RelationKey, RelationLoader, SingleRelationLoader};
+use crate::entity::{RelationAccess, RelationKey, RelationLoader, SingleRelationLoader};
 use crate::query::relation::{ManyToMany, ManyToOne, OneToOne, Relation};
 use crate::{Column, Entity, field::Field};
 use std::sync::Arc;
@@ -57,8 +57,7 @@ impl TestUser {
     pub const name: Field<Self, String> = Field::new("name");
 
     #[allow(non_upper_case_globals)]
-    pub const posts: Relation<Self, TestPost> =
-        Relation::new(Self::id, TestPost::user_id);
+    pub const posts: Relation<Self, TestPost> = Relation::new(Self::id, TestPost::user_id);
 
     #[allow(non_upper_case_globals)]
     pub const profile: Relation<Self, TestProfile, OneToOne> =
@@ -87,6 +86,27 @@ pub struct TestPostModel {
     pub user_id: i32,
     pub comments: Vec<TestCommentModel>,
     pub user: Option<Arc<TestUserModel>>,
+}
+
+// ✅ RelationAccess impls (with related_mut)
+impl RelationAccess<TestPostModel> for TestUserModel {
+    fn related(&self) -> &[TestPostModel] {
+        &self.posts
+    }
+
+    fn related_mut(&mut self) -> &mut [TestPostModel] {
+        &mut self.posts
+    }
+}
+
+impl RelationAccess<TestCommentModel> for TestPostModel {
+    fn related(&self) -> &[TestCommentModel] {
+        &self.comments
+    }
+
+    fn related_mut(&mut self) -> &mut [TestCommentModel] {
+        &mut self.comments
+    }
 }
 
 impl SingleRelationLoader<Arc<TestUserModel>> for TestPostModel {

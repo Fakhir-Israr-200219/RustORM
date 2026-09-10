@@ -4,6 +4,7 @@ use crate::entity::{Column, Entity};
 use crate::query::condition::Condition;
 use crate::query::expression::Expression;
 use crate::query::join::{Join, JoinTarget, JoinType};
+use crate::query::relation::Relation;
 use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStatement};
 use crate::sql::{collect_bind_values, compile_expression};
 use crate::value::BindValue;
@@ -13,6 +14,57 @@ pub struct NoRelations;
 pub struct RelationNode<Rel, Tail> {
     pub relation: Rel,
     pub tail: Tail,
+}
+// ============================================================
+// IntoRelationNode
+// ============================================================
+
+pub trait IntoRelationNode<E>
+where
+    E: Entity,
+{
+    type Output;
+
+    fn into_node(self) -> Self::Output;
+
+    fn register(&self, statement: &mut SelectStatement<E>);
+}
+
+// Direct relation
+impl<E, To, C> IntoRelationNode<E> for Relation<E, To, C>
+where
+    E: Entity,
+    To: Entity,
+{
+    type Output = RelationNode<Relation<E, To, C>, NoRelations>;
+
+    fn into_node(self) -> Self::Output {
+        RelationNode {
+            relation: self,
+            tail: NoRelations,
+        }
+    }
+
+    fn register(&self, statement: &mut SelectStatement<E>) {
+        statement.relations.push(self.info());
+    }
+}
+
+// Nested relation node (outer relation starts from E)
+impl<E, To, C, Tail> IntoRelationNode<E> for RelationNode<Relation<E, To, C>, Tail>
+where
+    E: Entity,
+    To: Entity,
+{
+    type Output = RelationNode<Relation<E, To, C>, Tail>;
+
+    fn into_node(self) -> Self::Output {
+        self
+    }
+
+    fn register(&self, statement: &mut SelectStatement<E>) {
+        statement.relations.push(self.relation.info());
+    }
 }
 
 pub struct Query<E, R = NoRelations> {
@@ -62,23 +114,17 @@ where
         self
     }
 
-    pub fn with<To, C>(
-        self,
-        relation: crate::query::relation::Relation<E, To, C>,
-    ) -> Query<E, RelationNode<crate::query::relation::Relation<E, To, C>, R>>
+    pub fn with<N>(self, node: N) -> Query<E, N::Output>
     where
-        To: Entity,
+        N: IntoRelationNode<E>,
     {
+        let mut statement = self.statement;
+
+        node.register(&mut statement);
+
         Query {
-            statement: {
-                let mut statement = self.statement;
-                statement.relations.push(relation.info());
-                statement
-            },
-            relations: RelationNode {
-                relation,
-                tail: self.relations,
-            },
+            statement,
+            relations: node.into_node(),
             _entity: PhantomData,
         }
     }
@@ -91,7 +137,7 @@ where
         let condition = relation.foreign_key_in(values);
 
         self.statement.where_clause = match self.statement.where_clause.take() {
-            Some(existing) => Some(crate::query::expression::Expression::Binary {
+            Some(existing) => Some(Expression::Binary {
                 left: Box::new(existing),
                 operator: crate::query::expression::BinaryOperator::And,
                 right: Box::new(condition),
@@ -101,32 +147,6 @@ where
 
         self
     }
-
-    // pub(crate) fn relation_infos(&self) -> &[crate::query::statement::RelationInfo] {
-    //     self.statement.relations()
-    // }
-
-    // pub(crate) fn relation_conditions(&self) -> Vec<crate::query::expression::Expression> {
-    //     self.statement
-    //         .relations()
-    //         .iter()
-    //         .map(|relation| relation.foreign_key_condition())
-    //         .collect()
-    // }
-
-    // pub(crate) fn relation_targets(&self) -> Vec<(&'static str, Column, Column)> {
-    //     self.statement
-    //         .relations()
-    //         .iter()
-    //         .map(|relation| {
-    //             (
-    //                 relation.target_table(),
-    //                 relation.source_column(),
-    //                 relation.target_column(),
-    //             )
-    //         })
-    //         .collect()
-    // }
 
     pub fn order_by(mut self, order: OrderBy) -> Self {
         self.statement.order_by = Some(order);
@@ -232,6 +252,7 @@ where
 
         self
     }
+
     pub fn cross_join(mut self, table: &'static str) -> Self {
         self.statement.joins.push(Join {
             join_type: JoinType::Cross,
@@ -243,9 +264,9 @@ where
     }
 }
 
-//
+// ============================================================
 // SQL generation
-//
+// ============================================================
 
 impl<E, R> Query<E, R>
 where
@@ -253,6 +274,7 @@ where
 {
     pub(crate) fn build_sql(&self) -> String {
         let mut next_placeholder = 1;
+
         let columns = self
             .statement
             .columns
@@ -312,10 +334,12 @@ where
 
             sql.push_str(&columns);
         }
+
         if let Some(condition) = &self.statement.having {
             sql.push_str(" HAVING ");
             sql.push_str(&compile_expression(condition, &mut next_placeholder));
         }
+
         if let Some(order_by) = &self.statement.order_by {
             sql.push_str(" ORDER BY ");
             sql.push_str(order_by.column.name());
@@ -341,6 +365,7 @@ where
 
         sql
     }
+
     pub(crate) fn build_count_sql(&self) -> String {
         let mut next_placeholder = 1;
 
@@ -380,22 +405,27 @@ where
 
         sql
     }
+
     pub(crate) fn compile(&self) -> crate::sql::CompiledQuery {
         let sql = self.build_sql();
 
         let mut binds = Vec::new();
 
         if let Some(ref condition) = self.statement.where_clause {
-            crate::sql::collect_bind_values(condition, &mut binds);
+            collect_bind_values(condition, &mut binds);
         }
 
         if let Some(ref condition) = self.statement.having {
-            crate::sql::collect_bind_values(condition, &mut binds);
+            collect_bind_values(condition, &mut binds);
         }
 
         crate::sql::CompiledQuery::new(sql, binds)
     }
 }
+
+// ============================================================
+// Execution
+// ============================================================
 
 impl<E, R> Query<E, R>
 where
@@ -413,6 +443,7 @@ where
                 BindValue::String(value) => {
                     query = query.bind(value);
                 }
+
                 BindValue::I64(value) => {
                     query = query.bind(value);
                 }
@@ -421,10 +452,14 @@ where
 
         let mut parents = query.fetch_all(db).await?;
 
-        self.relations.load(db, &mut parents).await?;
+        // ✅ Naya: mut refs collect karo
+        let mut refs: Vec<&mut E::Model> = parents.iter_mut().collect();
+
+        self.relations.load(db, &mut refs).await?;
 
         Ok(parents)
     }
+
     pub async fn count(self, db: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
         let sql = self.build_count_sql();
 
@@ -443,6 +478,7 @@ where
                 BindValue::String(value) => {
                     query = query.bind(value);
                 }
+
                 BindValue::I64(value) => {
                     query = query.bind(value);
                 }
@@ -451,6 +487,7 @@ where
 
         query.fetch_one(db).await
     }
+
     pub async fn fetch_all<M>(self, db: &sqlx::PgPool) -> Result<Vec<M>, sqlx::Error>
     where
         for<'r> M: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
@@ -464,6 +501,7 @@ where
                 BindValue::String(value) => {
                     query = query.bind(value);
                 }
+
                 BindValue::I64(value) => {
                     query = query.bind(value);
                 }
