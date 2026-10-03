@@ -7,6 +7,7 @@ mod tests {
 
     use super::models::*;
     use crate::Entity;
+    use crate::executor::UpdateData;
     use crate::sql::collect_bind_values;
     use crate::sql::compile_expression;
     use crate::value::BindValue;
@@ -1065,6 +1066,322 @@ mod tests {
         assert_eq!(
             query.build_sql(),
             "SELECT id, name FROM roles WHERE roles.id IN ($1, $2)"
+        );
+    }
+    #[tokio::test]
+    async fn user_create_works() {
+        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+            .await
+            .unwrap();
+
+        let user = TestUser::create(
+            &db,
+            TestUserCreate {
+                name: "CRUD Test".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert!(user.id > 0);
+        assert_eq!(user.name, "CRUD Test");
+    }
+    #[tokio::test]
+    async fn user_update_works() {
+        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+            .await
+            .unwrap();
+
+        let user = TestUser::create(
+            &db,
+            TestUserCreate {
+                name: "Before Update".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let updated = TestUser::update(
+            &db,
+            user.id,
+            TestUserUpdate {
+                name: Some("After Update".into()),
+            },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(updated.id, user.id);
+        assert_eq!(updated.name, "After Update");
+    }
+    #[tokio::test]
+    async fn user_delete_works() {
+        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+            .await
+            .unwrap();
+
+        let user = TestUser::create(
+            &db,
+            TestUserCreate {
+                name: "Delete Test".into(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let affected = TestUser::delete(&db, user.id).await.unwrap();
+
+        assert_eq!(affected, 1);
+
+        let row = sqlx::query("SELECT id FROM users WHERE id = $1")
+            .bind(user.id)
+            .fetch_optional(&db)
+            .await
+            .unwrap();
+
+        assert!(row.is_none());
+    }
+
+    #[tokio::test]
+    async fn user_create_many_works() {
+        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+            .await
+            .unwrap();
+
+        let users = TestUser::create_many(
+            &db,
+            vec![
+                TestUserCreate {
+                    name: "Create Many 1".into(),
+                },
+                TestUserCreate {
+                    name: "Create Many 2".into(),
+                },
+                TestUserCreate {
+                    name: "Create Many 3".into(),
+                },
+            ],
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(users.len(), 3);
+
+        assert!(users[0].id > 0);
+        assert!(users[1].id > 0);
+        assert!(users[2].id > 0);
+
+        assert_eq!(users[0].name, "Create Many 1");
+        assert_eq!(users[1].name, "Create Many 2");
+        assert_eq!(users[2].name, "Create Many 3");
+    }
+    #[test]
+    fn user_update_many_sql_works() {
+        let condition = TestUser::name.eq("Bulk Update Target");
+
+        let data = TestUserUpdate {
+            name: Some("Bulk Updated".into()),
+        };
+
+        let columns = data.columns();
+        let values = data.values();
+
+        let condition_expression = condition.into_ast();
+
+        let mut next_placeholder = 1;
+
+        let set_clause = columns
+            .iter()
+            .map(|column| {
+                let placeholder = format!("${}", next_placeholder);
+                next_placeholder += 1;
+
+                format!("{} = {}", column, placeholder)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let where_clause =
+            crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
+
+        let sql = format!(
+            "UPDATE {} SET {} WHERE {}",
+            TestUser::TABLE,
+            set_clause,
+            where_clause
+        );
+
+        assert_eq!(sql, "UPDATE users SET name = $1 WHERE name = $2");
+
+        let mut binds = values;
+
+        crate::sql::collect_bind_values(&condition_expression, &mut binds);
+
+        assert_eq!(binds.len(), 2);
+
+        match &binds[0] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Updated");
+            }
+            _ => panic!("Expected string bind"),
+        }
+
+        match &binds[1] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Update Target");
+            }
+            _ => panic!("Expected string bind"),
+        }
+    }
+
+    #[test]
+    fn user_delete_many_sql_works() {
+        let condition = TestUser::name.eq("Bulk Delete Target");
+
+        let condition_expression = condition.into_ast();
+
+        let mut next_placeholder = 1;
+
+        let where_clause =
+            crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
+
+        let sql = format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause);
+
+        assert_eq!(sql, "DELETE FROM users WHERE name = $1");
+
+        let mut binds = Vec::new();
+
+        crate::sql::collect_bind_values(&condition_expression, &mut binds);
+
+        assert_eq!(binds.len(), 1);
+
+        match &binds[0] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Delete Target");
+            }
+            _ => panic!("Expected string bind"),
+        }
+    }
+    #[test]
+    fn user_update_many_bind_order_works() {
+        let condition = TestUser::name.eq("Bulk Update Target");
+
+        let data = TestUserUpdate {
+            name: Some("Bulk Updated".into()),
+        };
+
+        let columns = data.columns();
+        let values = data.values();
+
+        let expression = condition.into_ast();
+
+        let mut next_placeholder = 1;
+
+        let set_clause = columns
+            .iter()
+            .map(|column| {
+                let placeholder = format!("${}", next_placeholder);
+                next_placeholder += 1;
+
+                format!("{} = {}", column, placeholder)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+
+        assert_eq!(
+            format!(
+                "UPDATE {} SET {} WHERE {}",
+                TestUser::TABLE,
+                set_clause,
+                where_clause
+            ),
+            "UPDATE users SET name = $1 WHERE name = $2"
+        );
+
+        let mut binds = values;
+
+        crate::sql::collect_bind_values(&expression, &mut binds);
+
+        assert_eq!(binds.len(), 2);
+
+        match &binds[0] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Updated");
+            }
+            _ => panic!("Expected string bind"),
+        }
+
+        match &binds[1] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Update Target");
+            }
+            _ => panic!("Expected string bind"),
+        }
+    }
+    #[test]
+    fn user_delete_many_bind_order_works() {
+        let condition = TestUser::name.eq("Bulk Delete Target");
+
+        let expression = condition.into_ast();
+
+        let mut next_placeholder = 1;
+
+        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+
+        assert_eq!(
+            format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause),
+            "DELETE FROM users WHERE name = $1"
+        );
+
+        let mut binds = Vec::new();
+
+        crate::sql::collect_bind_values(&expression, &mut binds);
+
+        assert_eq!(binds.len(), 1);
+
+        match &binds[0] {
+            BindValue::String(value) => {
+                assert_eq!(value, "Bulk Delete Target");
+            }
+            _ => panic!("Expected string bind"),
+        }
+    }
+    #[test]
+    fn user_update_many_with_and_condition_works() {
+        let condition = TestUser::name.eq("Alice").and(TestUser::name.eq("Bob"));
+
+        let data = TestUserUpdate {
+            name: Some("Updated".into()),
+        };
+
+        let columns = data.columns();
+        let expression = condition.into_ast();
+
+        let mut next_placeholder = 1;
+
+        let set_clause = columns
+            .iter()
+            .map(|column| {
+                let placeholder = format!("${}", next_placeholder);
+                next_placeholder += 1;
+
+                format!("{} = {}", column, placeholder)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+
+        assert_eq!(
+            format!(
+                "UPDATE {} SET {} WHERE {}",
+                TestUser::TABLE,
+                set_clause,
+                where_clause
+            ),
+            "UPDATE users SET name = $1 WHERE name = $2 AND name = $3"
         );
     }
 }

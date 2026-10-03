@@ -9,7 +9,12 @@ use rustorm::{
         SingleRelationLoader,
     },
     field::Field,
-    query::relation::{ManyToMany, ManyToOne, OneToOne, Relation},  // <-- Added ManyToMany
+    query::relation::{
+        ManyToMany,
+        ManyToOne,
+        OneToOne,
+        Relation,
+    },
 };
 
 use sqlx::PgPool;
@@ -50,7 +55,49 @@ impl Profile {
     #[allow(non_upper_case_globals)]
     pub const bio: Field<Self, String> = Field::new("bio");
 }
+// ============================================================
+// USER CREATE / UPDATE DATA
+// ============================================================
 
+pub struct UserCreate {
+    pub name: String,
+}
+
+impl rustorm::executor::InsertData<User> for UserCreate {
+    fn columns(&self) -> &'static [&'static str] {
+        &["name"]
+    }
+
+    fn values(&self) -> Vec<rustorm::value::BindValue> {
+        vec![rustorm::value::BindValue::String(self.name.clone())]
+    }
+}
+
+pub struct UserUpdate {
+    pub name: Option<String>,
+}
+
+impl rustorm::executor::UpdateData<User> for UserUpdate {
+    fn columns(&self) -> Vec<&'static str> {
+        let mut columns = Vec::new();
+
+        if self.name.is_some() {
+            columns.push("name");
+        }
+
+        columns
+    }
+
+    fn values(&self) -> Vec<rustorm::value::BindValue> {
+        let mut values = Vec::new();
+
+        if let Some(name) = &self.name {
+            values.push(rustorm::value::BindValue::String(name.clone()));
+        }
+
+        values
+    }
+}
 impl RelationKey for ProfileModel {
     fn relation_key(&self, column: Column) -> Option<i64> {
         match column.name() {
@@ -78,10 +125,7 @@ impl Entity for Role {
 
     const TABLE: &'static str = "roles";
 
-    const COLUMNS: &'static [Column] = &[
-        Column::new("id"),
-        Column::new("name"),
-    ];
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl Role {
@@ -154,10 +198,7 @@ impl Entity for User {
 
     const TABLE: &'static str = "users";
 
-    const COLUMNS: &'static [Column] = &[
-        Column::new("id"),
-        Column::new("name"),
-    ];
+    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("name")];
 }
 
 impl User {
@@ -169,8 +210,7 @@ impl User {
 
     // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const posts: Relation<Self, Post> =
-        Relation::new(Self::id, Post::user_id);
+    pub const posts: Relation<Self, Post> = Relation::new(Self::id, Post::user_id);
 
     // ONE-TO-ONE
     #[allow(non_upper_case_globals)]
@@ -263,13 +303,11 @@ impl Post {
 
     // ONE-TO-MANY
     #[allow(non_upper_case_globals)]
-    pub const comments: Relation<Self, Comment> =
-        Relation::new(Self::id, Comment::post_id);
+    pub const comments: Relation<Self, Comment> = Relation::new(Self::id, Comment::post_id);
 
     // MANY-TO-ONE
     #[allow(non_upper_case_globals)]
-    pub const user: Relation<Self, User, ManyToOne> =
-        Relation::new(Self::user_id, User::id);
+    pub const user: Relation<Self, User, ManyToOne> = Relation::new(Self::user_id, User::id);
 }
 
 impl RelationKey for PostModel {
@@ -347,15 +385,13 @@ impl RelationKey for CommentModel {
 
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
-    let db =
-        PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
+    let db = PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
 
     // ------------------------------------------------------------
     // ONE-TO-MANY
     // ------------------------------------------------------------
 
-    let users_with_posts =
-        User::find().with(User::posts).all(&db).await?;
+    let users_with_posts = User::find().with(User::posts).all(&db).await?;
 
     println!("\n=== USERS WITH POSTS ===");
 
@@ -380,17 +416,13 @@ async fn main() -> Result<(), sqlx::Error> {
     // COUNT
     // ------------------------------------------------------------
 
-    let user_count =
-        User::find().select(User::id.count()).count(&db).await?;
+    let user_count = User::find().select(User::id.count()).count(&db).await?;
 
     // ------------------------------------------------------------
     // POSTS
     // ------------------------------------------------------------
 
-    let posts = Post::find()
-        .where_(Post::title.eq("Rust"))
-        .all(&db)
-        .await?;
+    let posts = Post::find().where_(Post::title.eq("Rust")).all(&db).await?;
 
     // ------------------------------------------------------------
     // COUNT WITH WHERE
@@ -418,8 +450,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // SUM
     // ------------------------------------------------------------
 
-    let user_id_sum =
-        User::find().select(User::id.sum()).count(&db).await?;
+    let user_id_sum = User::find().select(User::id.sum()).count(&db).await?;
 
     let user_id_sum_with_where = User::find()
         .where_(User::name.eq("Fakhir"))
@@ -452,8 +483,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // POSTS WITH COMMENTS
     // ------------------------------------------------------------
 
-    let posts_with_comments =
-        Post::find().with(Post::comments).all(&db).await?;
+    let posts_with_comments = Post::find().with(Post::comments).all(&db).await?;
 
     println!("\n=== POSTS WITH COMMENTS ===");
 
@@ -469,8 +499,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // MANY-TO-ONE
     // ------------------------------------------------------------
 
-    let posts_with_users =
-        Post::find().with(Post::user).all(&db).await?;
+    let posts_with_users = Post::find().with(Post::user).all(&db).await?;
 
     println!("\n=== POSTS WITH USERS ===");
 
@@ -488,8 +517,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // ONE-TO-ONE
     // ------------------------------------------------------------
 
-    let users_with_profiles =
-        User::find().with(User::profile).all(&db).await?;
+    let users_with_profiles = User::find().with(User::profile).all(&db).await?;
 
     println!("\n=== USERS WITH PROFILES ===");
 
@@ -507,8 +535,7 @@ async fn main() -> Result<(), sqlx::Error> {
     // MANY-TO-MANY (NEW)
     // ------------------------------------------------------------
 
-    let users_with_roles =
-        User::find().with(User::roles).all(&db).await?;
+    let users_with_roles = User::find().with(User::roles).all(&db).await?;
 
     println!("\n=== USERS WITH ROLES ===");
 
@@ -520,6 +547,158 @@ async fn main() -> Result<(), sqlx::Error> {
         }
     }
 
+    // ============================================================
+    // CRUD TESTS
+    // ============================================================
+
+    println!("\n========================================");
+    println!("              CRUD TESTS");
+    println!("========================================");
+
+    // ------------------------------------------------------------
+    // CREATE
+    // ------------------------------------------------------------
+
+    let created_user = User::create(
+        &db,
+        UserCreate {
+            name: "CRUD Create Test".into(),
+        },
+    )
+    .await?;
+
+    println!("\nCREATE:");
+    println!("{created_user:#?}");
+
+    assert!(created_user.id > 0);
+    assert_eq!(created_user.name, "CRUD Create Test");
+
+    // ------------------------------------------------------------
+    // UPDATE
+    // ------------------------------------------------------------
+
+    let updated_user = User::update(
+        &db,
+        created_user.id,
+        UserUpdate {
+            name: Some("CRUD Update Test".into()),
+        },
+    )
+    .await?;
+
+    println!("\nUPDATE:");
+    println!("{updated_user:#?}");
+
+    assert_eq!(updated_user.id, created_user.id);
+    assert_eq!(updated_user.name, "CRUD Update Test");
+
+    // ------------------------------------------------------------
+    // VERIFY UPDATE IN DATABASE
+    // ------------------------------------------------------------
+
+    let db_user = sqlx::query_as::<_, (i32, String)>("SELECT id, name FROM users WHERE id = $1")
+        .bind(created_user.id)
+        .fetch_one(&db)
+        .await?;
+
+    assert_eq!(db_user.0, created_user.id);
+    assert_eq!(db_user.1, "CRUD Update Test");
+
+    println!("UPDATE database verification: PASSED");
+
+    // ------------------------------------------------------------
+    // DELETE
+    // ------------------------------------------------------------
+
+    let affected = User::delete(&db, created_user.id).await?;
+
+    println!("\nDELETE:");
+    println!("Rows affected: {affected}");
+
+    assert_eq!(affected, 1);
+
+    // ------------------------------------------------------------
+    // VERIFY DELETE IN DATABASE
+    // ------------------------------------------------------------
+
+    let deleted_user = sqlx::query("SELECT id FROM users WHERE id = $1")
+        .bind(created_user.id)
+        .fetch_optional(&db)
+        .await?;
+
+    assert!(deleted_user.is_none());
+
+    println!("DELETE database verification: PASSED");
+
+    // ------------------------------------------------------------
+    // CREATE MANY
+    // ------------------------------------------------------------
+
+    let created_users = User::create_many(
+        &db,
+        vec![
+            UserCreate {
+                name: "CRUD Create Many 1".into(),
+            },
+            UserCreate {
+                name: "CRUD Create Many 2".into(),
+            },
+            UserCreate {
+                name: "CRUD Create Many 3".into(),
+            },
+        ],
+    )
+    .await?;
+
+    println!("\nCREATE MANY:");
+    println!("{created_users:#?}");
+
+    assert_eq!(created_users.len(), 3);
+
+    for user in &created_users {
+        assert!(user.id > 0);
+    }
+
+    // ------------------------------------------------------------
+    // UPDATE MANY
+    // ------------------------------------------------------------
+
+    let updated_count = User::update_many(
+        &db,
+        User::name.eq("CRUD Create Many 1"),
+        UserUpdate {
+            name: Some("CRUD Update Many".into()),
+        },
+    )
+    .await?;
+
+    println!("\nUPDATE MANY:");
+    println!("Rows affected: {updated_count}");
+
+    assert_eq!(updated_count, 1);
+
+    // ------------------------------------------------------------
+    // DELETE MANY
+    // ------------------------------------------------------------
+
+    let deleted_count = User::delete_many(&db, User::name.eq("CRUD Create Many 2")).await?;
+
+    println!("\nDELETE MANY:");
+    println!("Rows affected: {deleted_count}");
+
+    assert_eq!(deleted_count, 1);
+
+    // ------------------------------------------------------------
+    // CLEANUP REMAINING CREATE MANY ROWS
+    // ------------------------------------------------------------
+
+    for user in &created_users {
+        let _ = User::delete(&db, user.id).await?;
+    }
+
+    println!("\n========================================");
+    println!("        ALL CRUD TESTS PASSED");
+    println!("========================================");
     // ------------------------------------------------------------
     // OUTPUT
     // ------------------------------------------------------------
@@ -538,9 +717,7 @@ async fn main() -> Result<(), sqlx::Error> {
 
     println!("\nUser ID sum: {user_id_sum}");
 
-    println!(
-        "\nUser ID sum with where: {user_id_sum_with_where}"
-    );
+    println!("\nUser ID sum with where: {user_id_sum_with_where}");
 
     println!("\nGrouped sums: {grouped_sums:#?}");
 

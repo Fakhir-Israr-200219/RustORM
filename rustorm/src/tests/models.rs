@@ -1,18 +1,64 @@
 use crate::entity::{RelationKey, RelationLoader, SingleRelationLoader};
+use crate::executor::{InsertData, UpdateData};
 use crate::query::relation::{ManyToMany, ManyToOne, OneToOne, Relation};
+use crate::value::BindValue;
 use crate::{Column, Entity, field::Field};
 use std::sync::Arc;
 
 // ============= TestUser =============
 pub struct TestUser;
+pub struct TestUserCreate {
+    pub name: String,
+}
+pub struct TestUserUpdate {
+    pub name: Option<String>,
+}
 
-#[derive(Debug)]
+impl UpdateData<TestUser> for TestUserUpdate {
+    fn columns(&self) -> Vec<&'static str> {
+        let mut columns = Vec::new();
+
+        if self.name.is_some() {
+            columns.push("name");
+        }
+
+        columns
+    }
+
+    fn values(&self) -> Vec<BindValue> {
+        let mut values = Vec::new();
+
+        if let Some(name) = &self.name {
+            values.push(BindValue::String(name.clone()));
+        }
+
+        values
+    }
+}
+impl InsertData<TestUser> for TestUserCreate {
+    fn columns(&self) -> &'static [&'static str] {
+        &["name"]
+    }
+
+    fn values(&self) -> Vec<BindValue> {
+        vec![BindValue::String(self.name.clone())]
+    }
+}
+
+#[derive(Debug, sqlx::FromRow)]
 pub struct TestUserModel {
     pub id: i32,
+
     #[allow(dead_code)]
     pub name: String,
+
+    #[sqlx(skip)]
     pub posts: Vec<TestPostModel>,
+
+    #[sqlx(skip)]
     pub profile: Option<Arc<TestProfileModel>>,
+
+    #[sqlx(skip)]
     pub roles: Vec<Arc<TestRoleModel>>,
 }
 
@@ -57,8 +103,7 @@ impl TestUser {
     pub const name: Field<Self, String> = Field::new("name");
 
     #[allow(non_upper_case_globals)]
-    pub const posts: Relation<Self, TestPost> =
-        Relation::new(Self::id, TestPost::user_id);
+    pub const posts: Relation<Self, TestPost> = Relation::new(Self::id, TestPost::user_id);
 
     #[allow(non_upper_case_globals)]
     pub const profile: Relation<Self, TestProfile, OneToOne> =

@@ -1,4 +1,4 @@
-pub(crate) enum BindValue {
+pub enum BindValue {
     String(String),
     I64(i64),
 }
