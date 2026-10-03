@@ -47,7 +47,7 @@ QUERY ENGINE
 ├── DISTINCT               ✅
 ├── GROUP BY               ✅
 ├── HAVING                 ✅
-├── Aggregates             ✅
+├── Aggregates             ⚠️
 ├── JOINs                  ✅
 ├── CROSS JOIN             ✅
 ├── Multiple JOINs         ✅
@@ -67,15 +67,15 @@ RELATIONS
 └── Nested .with()         ⬜
 
 CRUD
-├── INSERT                 ⬜
-├── UPDATE                 ⬜
-└── DELETE                 ⬜
+├── INSERT                 ✅
+├── UPDATE                 ✅
+└── DELETE                 ✅
 
 RUNTIME
-├── Executor               ⬜
-├── PostgreSQL             ⬜
-├── Pool                   ⬜
-├── Error handling         ⬜
+├── Executor               ✅
+├── PostgreSQL             ✅
+├── Pool                   ✅
+├── Error handling         ⚠️
 └── Transactions           ⬜
 
 ADVANCED SQL
@@ -109,7 +109,7 @@ QUALITY
 ├── Test extraction        ⬜
 ├── Visibility cleanup     ⬜
 ├── Clippy                 ⬜
-├── Documentation           ⬜
+├── Documentation          ⬜
 └── Multi-DB architecture  ⬜
 
 
