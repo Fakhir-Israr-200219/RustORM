@@ -1,99 +1,3 @@
-Aaj pehle sirf:
-JoinType
-Join
-SelectStatement.joins
-banayenge.
-Phir compiler mein:
-INNER JOIN
-LEFT JOIN
-RIGHT JOIN
-FULL JOIN
-generate karenge.
-Phir tests:
-inner_join_works
-left_join_works
-right_join_works
-full_join_works
-multiple_joins_work
-join_with_where_works
-join_with_group_by_works
-join_with_having_works
-
-
-
-Result kis Rust type mein jayega?
-UserModel + Vec<PostModel>?
-flat result?
-nested result?
-.with() ka API?
-multiple relations?
-aliases?
-duplicate columns?
-pagination with joins?
-aggregation + joins?
-generated relation metadata kahan rahegi?
-
-
-PHASE 1
-Core Query Engine
-        │
-        ▼
-PHASE 2
-Query Architecture
-        │
-        ├── JOIN
-        ├── Relation representation
-        ├── INSERT
-        ├── UPDATE
-        ├── DELETE
-        └── transactions
-        │
-        ▼
-PHASE 3
-Database Layer
-        │
-        ├── Executor
-        ├── Database / Pool
-        ├── Error handling
-        └── PostgreSQL abstraction
-        │
-        ▼
-PHASE 4
-Schema System
-        │
-        ├── schema.rustorm parser
-        ├── schema representation
-        └── validation
-        │
-        ▼
-PHASE 5
-CLI
-        │
-        ├── rustorm init
-        ├── rustorm dev
-        ├── migration generation
-        └── entity generation
-        │
-        ▼
-PHASE 6
-Relations
-        │
-        ├── belongs_to
-        ├── has_many
-        ├── has_one
-        └── many_to_many
-        │
-        ▼
-PHASE 7
-Production hardening
-        │
-        ├── visibility
-        ├── errors
-        ├── transactions
-        ├── clippy
-        ├── docs
-        ├── tests
-        └── multi-database architecture
 
 
 
@@ -134,318 +38,33 @@ JOIN ka  pub(crate) remove krna hy
 
 
 
-
-Haan bhai — **agar Step 4 bhi implement + tests pass ho jayein**, to hamara **basic JOIN engine complete** samjha ja sakta hai. ✅
-
-### JOIN milestone
-
-```text
-JOIN Engine
-├── INNER JOIN       ✅
-├── LEFT JOIN        ✅
-├── RIGHT JOIN       ✅
-├── FULL JOIN        ✅
-├── JoinCondition    ✅
-├── Relation         ✅
-├── JoinTarget       ✅
-├── Field-to-field   JOIN condition ✅
-└── Relation-based JOIN             ✅
-```
-
-Aur final API:
-
-```rust
-User::find()
-    .inner_join(User::posts)
-
-User::find()
-    .left_join(User::posts)
-
-User::find()
-    .right_join(User::posts)
-
-User::find()
-    .full_join(User::posts)
-```
-
-### Lekin ek distinction important hai
-
-**JOIN ka SQL/query-builder part complete hoga**, lekin **Relations system complete nahi hoga**.
-
-Baad mein relations ke liye:
-
-```text
-belongs_to
-has_many
-has_one
-many_to_many
-```
-
-aur:
-
-```rust
-User::posts
-Post::user
-```
-
-ki generated schema/CLI support banani hai.
-
-Aur `with()`:
-
-```rust
-User::find()
-    .with(User::posts)
-```
-
-ye JOIN se alag **relation loading** feature hoga.
-
-So current milestone ko hum:
-
-> **JOIN Query Engine — Complete ✅**
-
-kahenge.
-
-**Ab Step 4 implement karo, phir `cargo check` + `cargo test` chalao. Agar 47/47 green aaye, JOIN milestone officially close kar denge.**
-
-
-
-
-
-✅ Entity abstraction
-✅ Typed Fields
-✅ Conditions = <> > >= < <=
-✅ AND / OR
-✅ ORDER BY
-✅ LIMIT / OFFSET
-✅ DISTINCT
-✅ GROUP BY
-✅ HAVING
-✅ COUNT / SUM / AVG / MIN / MAX
-✅ Basic subqueries
-✅ JOINs — all major types
-✅ Relation joins
-✅ Multiple joins
-✅ Relation metadata
-✅ IN (...) list expressions
-✅ Bind collection for normal relation IN
-⚠️ Subquery bind propagation — abhi pending
-⚠️ Unified SQL + bind compilation hardening — pending
-⚠️ Proper count() execution semantics — pending
-RELATIONS
-✅ Relation<From, To>
-✅ Relation metadata
-✅ .with()
-✅ Actual eager loading
-✅ Parent-key → child-query loading
-✅ Grouping children by foreign key
-✅ Attaching children to parent
-✅ User → Posts real PostgreSQL test
-✅ Post → Comments real PostgreSQL test
-⬜ Nested .with() — abhi verify/implement karna baqi hai
-
-
-
-CURRENT
-   │
-   ▼
-JOIN COMPLETE ✅
-   │
-   ▼
-JOIN TESTS ✅
-   │
-   ▼
-QUERY COMPILATION/BINDING HARDEN ⚠️
-   │
-   ▼
-RELATION DESIGN ✅
-   │
-   ▼
-WITH ✅
-   │
-   ▼
-CREATE / UPDATE / DELETE ⬅️ NEXT MAJOR PHASE
-   │
-   ▼
-TRANSACTIONS
-   │
-   ▼
-EXECUTOR
-   │
-   ▼
-CLI
-   │
-   ▼
-GENERATED ENTITIES
-
-| Feature    | Status                    |
-| ---------- | ------------------------- |
-| WHERE      | ✅ Done                    |
-| ORDER BY   | ✅ Done                    |
-| LIMIT      | ✅ Done                    |
-| OFFSET     | ✅ Done                    |
-| DISTINCT   | ✅ Done                    |
-| GROUP BY   | ✅ Done                    |
-| HAVING     | ✅ Done                    |
-| INNER JOIN | ✅ Done                    |
-| LEFT JOIN  | ✅ Done                    |
-| RIGHT JOIN | ✅ Done                    |
-| FULL JOIN  | ✅ Done                    |
-| CROSS JOIN | ✅ Done                    |
-| Subquery   | ⚠️ **Basic support done** |
-| CTE        | ⬜ Not done                |
-| UNION      | ⬜ Not done                |
-| FOR UPDATE | ⬜ Not done                |
-
-
-QUERY FEATURES
-
-WHERE          ✅
-ORDER BY       ✅
-LIMIT          ✅
-OFFSET         ✅
-DISTINCT       ✅
-GROUP BY       ✅
-HAVING         ✅
-
-JOIN
-  INNER        ✅
-  LEFT         ✅
-  RIGHT        ✅
-  FULL         ✅
-  CROSS        ✅
-
-SUBQUERY       ⚠️ Basic
-CTE            ⬜
-UNION          ⬜
-FOR UPDATE     ⬜
-
-
-
-RELATIONS
-├── One-to-One          ✅
-├── One-to-Many         ✅
-├── Many-to-One         ✅
-├── Many-to-Many        ⬜
-└── Nested Relations    ⬜
-          │
-          ▼
-QUERY ENGINE HARDENING
-├── Subquery binds      ⚠️
-├── Qualified columns   ⬜
-├── Proper count()      ⬜
-          │
-          ▼
-ADVANCED SQL
-├── CTE                 ⬜
-├── UNION               ⬜
-└── FOR UPDATE          ⬜
-          │
-          ▼
-CRUD
-├── INSERT              ⬜
-├── UPDATE              ⬜
-└── DELETE              ⬜
-          │
-          ▼
-RUNTIME
-├── Executor            ⬜
-└── Transactions        ⬜
-          │
-          ▼
-CLI / GENERATOR
-├── schema.rustorm      ⬜
-├── Migrations          ⬜
-├── Generated entities  ⬜
-└── Client generation   ⬜
-
-One-to-Many         ✅ DONE
-       ↓
-Many-to-One         ← NEXT
-       ↓
-One-to-One
-       ↓
-Many-to-Many
-       ↓
-Nested Relations
-       ↓
-Query Engine hardening
-       ↓
-Executor
-       ↓
-Transactions
-       ↓
-CRUD
-
-
-
-CURRENT One-to-Many
-       │
-       ▼
-1. Cardinality markers
-       │
-       ▼
-2. Make Relation<From, To, C>
-       │
-       ▼
-3. Convert existing One-to-Many
-       │
-       ▼
-cargo test
-       │
-       ▼
-4. Add Many-to-One
-       │
-       ▼
-cargo test
-       │
-       ▼
-5. Add One-to-One
-       │
-       ▼
-cargo test
-       │
-       ▼
-6. Design Many-to-Many
-       │
-       ▼
-7. Implement Many-to-Many
-       │
-       ▼
-8. Nested relations
-
-
-
 QUERY ENGINE
-├── WHERE                 ✅
-├── ORDER BY              ✅
-├── LIMIT / OFFSET        ✅
-├── DISTINCT              ✅
-├── GROUP BY              ✅
-├── HAVING                ✅
-├── Aggregates            ✅
-├── JOINs                 ✅
-├── Relation joins        ✅
-├── Multiple joins        ✅
-├── Basic subqueries      ⚠️
-└── IN expressions        ✅
+├── WHERE                  ✅
+├── Operators              ✅
+├── AND / OR               ✅
+├── ORDER BY               ✅
+├── LIMIT / OFFSET         ✅
+├── DISTINCT               ✅
+├── GROUP BY               ✅
+├── HAVING                 ✅
+├── Aggregates             ✅
+├── JOINs                  ✅
+├── CROSS JOIN             ✅
+├── Multiple JOINs         ✅
+├── IN                     ✅
+├── Basic Subquery         ⚠️
+├── Subquery binds         ⚠️
+├── Qualified columns      ⬜
+└── count() execution      ⬜
 
 RELATIONS
 ├── One-to-Many            ✅
 ├── Many-to-One            ✅
 ├── One-to-One             ✅
 ├── Many-to-Many           ✅
-└── Nested .with()         ⬜  ← NEXT
-
-QUERY ENGINE HARDENING
-├── Subquery bind propagation       ⚠️
-├── Unified SQL + bind compilation  ⚠️
-├── Qualified columns               ⬜
-└── Proper count() execution       ⬜
-
-ADVANCED SQL
-├── CTE                    ⬜
-├── UNION                  ⬜
-└── FOR UPDATE             ⬜
+├── .with()                ✅
+├── Eager loading          ✅
+└── Nested .with()         ⬜
 
 CRUD
 ├── INSERT                 ⬜
@@ -454,51 +73,41 @@ CRUD
 
 RUNTIME
 ├── Executor               ⬜
+├── PostgreSQL             ⬜
+├── Pool                   ⬜
+├── Error handling         ⬜
 └── Transactions           ⬜
 
-CLI / GENERATOR
+ADVANCED SQL
+├── CTE                    ⬜
+├── UNION                  ⬜
+└── FOR UPDATE             ⬜
+
+SCHEMA
 ├── schema.rustorm         ⬜
-├── Migrations             ⬜
-├── Generated entities     ⬜
-└── Client generation      ⬜
+├── Parser                 ⬜
+├── Representation         ⬜
+└── Validation             ⬜
 
+MIGRATIONS
+├── Generate               ⬜
+├── Run                    ⬜
+└── Rollback               ⬜
 
-// One-to-Many → One-to-Many
-User::find()
-    .with(User::posts.with(Post::comments))
+GENERATOR
+├── Entities               ⬜
+├── Relations              ⬜
+└── Client API             ⬜
 
-// One-to-Many → Many-to-One
-User::find()
-    .with(User::posts.with(Post::user))
+CLI
+├── init                   ⬜
+├── dev                    ⬜
+├── generate               ⬜
+└── migration              ⬜
 
-// One-to-One → ...
-User::find()
-    .with(User::profile.with(Profile::user))
-
-// Many-to-Many → ...
-User::find()
-    .with(User::roles.with(Role::permissions))
-
-One-to-Many
-    └── Many-to-One
-        └── One-to-One
-            └── Many-to-Many
-
-User
- └── posts
-      └── comments
-           └── user
-
-Phir har node ki apni RelationLoad implementation decide karegi ke:
-
-One-to-Many kaise load karna hai
-Many-to-One kaise load karna hai
-One-to-One kaise load karna hai
-Many-to-Many kaise load karna hai
-
-
-Aur test sirf:
-User::find()
-    .with(User::posts.with(Post::comments))
-
-
+QUALITY
+├── Test extraction        ⬜
+├── Visibility cleanup     ⬜
+├── Clippy                 ⬜
+├── Documentation           ⬜
+└── Multi-DB architecture  ⬜
