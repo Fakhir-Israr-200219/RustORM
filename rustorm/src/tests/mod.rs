@@ -1449,3 +1449,15 @@ fn multiple_where_conditions_work() {
 
     assert_eq!(compiled.binds.len(), 2);
 }
+#[test]
+fn qualified_column_select_works() {
+    let query = TestUser::find()
+        .select(TestUser::id.select());
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT id FROM users"
+    );
+}
