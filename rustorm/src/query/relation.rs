@@ -8,34 +8,35 @@ use crate::entity::{Column, Entity, RelationKey, RelationLoader, SingleRelationL
 use crate::field::Field;
 use crate::query::Query;
 use crate::query::join::{JoinCondition, JoinTarget};
-use crate::query::query::{NoRelations, RelationNode};
+use crate::query::builder::{NoRelations, RelationNode};
 
 pub struct OneToMany;
 pub struct ManyToOne;
 pub struct OneToOne;
 pub struct ManyToMany;
 
+#[allow(async_fn_in_trait)]
 pub trait RelationLoad<E>
 where
     E: Entity,
 {
-    fn load(
+    async fn load(
         &self,
         db: &sqlx::PgPool,
         parents: &mut [E::Model],
-    ) -> impl std::future::Future<Output = Result<(), sqlx::Error>>;
+    ) -> Result<(), sqlx::Error>;
 }
 
 impl<E> RelationLoad<E> for NoRelations
 where
     E: Entity,
 {
-    fn load(
+    async fn load(
         &self,
         _db: &sqlx::PgPool,
         _parents: &mut [E::Model],
-    ) -> impl std::future::Future<Output = Result<(), sqlx::Error>> {
-        async { Ok(()) }
+    ) -> Result<(), sqlx::Error> {
+        Ok(())
     }
 }
 

@@ -1,13 +1,13 @@
 pub mod condition;
-pub mod expression;
-pub mod join;
-pub mod statement;
-pub mod query;
+pub(crate) mod expression;
+pub(crate) mod join;
+pub(crate) mod statement;
+pub mod builder;
 pub mod relation;
 
 pub use condition::Condition;
 
-pub use query::Query;
+pub use builder::Query;
 
 pub use statement::{
     OrderBy,

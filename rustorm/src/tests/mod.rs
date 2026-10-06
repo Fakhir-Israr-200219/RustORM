@@ -1,1387 +1,1382 @@
 // Make the models module public and accessible
-pub mod models;
+mod models;
 
-#[cfg(test)]
-mod tests {
-    use std::sync::Arc;
+use std::sync::Arc;
 
-    use super::models::*;
-    use crate::Entity;
-    use crate::executor::UpdateData;
-    use crate::sql::collect_bind_values;
-    use crate::sql::compile_expression;
-    use crate::value::BindValue;
+use self::models::*;
+use crate::Entity;
+use crate::executor::UpdateData;
+use crate::sql::collect_bind_values;
+use crate::sql::compile_expression;
+use crate::value::BindValue;
 
-    #[test]
-    fn user_query_is_generic() {
-        let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
-    }
-    #[test]
-    fn post_query_is_generic() {
-        let query = TestPost::find().where_(TestPost::title.eq("Rust"));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, title, user_id FROM posts WHERE title = $1");
-    }
+#[test]
+fn user_query_is_generic() {
+    let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
+}
+#[test]
+fn post_query_is_generic() {
+    let query = TestPost::find().where_(TestPost::title.eq("Rust"));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, title, user_id FROM posts WHERE title = $1");
+}
 
-    #[test]
-    fn integer_field_is_typed() {
-        let query = TestUser::find().where_(TestUser::id.eq(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id = $1");
-    }
+#[test]
+fn integer_field_is_typed() {
+    let query = TestUser::find().where_(TestUser::id.eq(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id = $1");
+}
 
-    #[test]
-    fn condition_belongs_to_entity() {
-        let condition = TestUser::name.eq("Fakhir");
-        let query = TestUser::find().where_(condition);
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
-    }
-    #[test]
-    fn not_eq_operator_works() {
-        let query = TestUser::find().where_(TestUser::id.not_eq(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id <> $1");
-    }
+#[test]
+fn condition_belongs_to_entity() {
+    let condition = TestUser::name.eq("Fakhir");
+    let query = TestUser::find().where_(condition);
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE name = $1");
+}
+#[test]
+fn not_eq_operator_works() {
+    let query = TestUser::find().where_(TestUser::id.not_eq(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id <> $1");
+}
 
-    #[test]
-    fn gt_operator_works() {
-        let query = TestUser::find().where_(TestUser::id.gt(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id > $1");
-    }
+#[test]
+fn gt_operator_works() {
+    let query = TestUser::find().where_(TestUser::id.gt(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id > $1");
+}
 
-    #[test]
-    fn gte_operator_works() {
-        let query = TestUser::find().where_(TestUser::id.gte(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id >= $1");
-    }
+#[test]
+fn gte_operator_works() {
+    let query = TestUser::find().where_(TestUser::id.gte(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id >= $1");
+}
 
-    #[test]
-    fn lt_operator_works() {
-        let query = TestUser::find().where_(TestUser::id.lt(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id < $1");
-    }
+#[test]
+fn lt_operator_works() {
+    let query = TestUser::find().where_(TestUser::id.lt(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id < $1");
+}
 
-    #[test]
-    fn lte_operator_works() {
-        let query = TestUser::find().where_(TestUser::id.lte(10));
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users WHERE id <= $1");
-    }
-    #[test]
-    fn and_condition_works() {
-        let condition = TestUser::id.gt(10).and(TestUser::name.eq("Fakhir"));
-        let mut next_placeholder = 1;
-        let sql = compile_expression(&condition.expression, &mut next_placeholder);
-        assert_eq!(sql, "id > $1 AND name = $2");
-    }
-    #[test]
-    fn or_condition_works() {
-        let condition = TestUser::id.gt(10).or(TestUser::name.eq("Fakhir"));
-        let mut next_placeholder = 1;
-        let sql = compile_expression(&condition.expression, &mut next_placeholder);
-        assert_eq!(sql, "id > $1 OR name = $2");
-    }
-    #[test]
-    fn order_by_asc_works() {
-        let query = TestUser::find().order_by(TestUser::name.asc());
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC");
-    }
+#[test]
+fn lte_operator_works() {
+    let query = TestUser::find().where_(TestUser::id.lte(10));
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users WHERE id <= $1");
+}
+#[test]
+fn and_condition_works() {
+    let condition = TestUser::id.gt(10).and(TestUser::name.eq("Fakhir"));
+    let mut next_placeholder = 1;
+    let sql = compile_expression(&condition.expression, &mut next_placeholder);
+    assert_eq!(sql, "id > $1 AND name = $2");
+}
+#[test]
+fn or_condition_works() {
+    let condition = TestUser::id.gt(10).or(TestUser::name.eq("Fakhir"));
+    let mut next_placeholder = 1;
+    let sql = compile_expression(&condition.expression, &mut next_placeholder);
+    assert_eq!(sql, "id > $1 OR name = $2");
+}
+#[test]
+fn order_by_asc_works() {
+    let query = TestUser::find().order_by(TestUser::name.asc());
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC");
+}
 
-    #[test]
-    fn order_by_desc_works() {
-        let query = TestUser::find().order_by(TestUser::id.desc());
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users ORDER BY id DESC");
+#[test]
+fn order_by_desc_works() {
+    let query = TestUser::find().order_by(TestUser::id.desc());
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users ORDER BY id DESC");
+}
+#[test]
+fn limit_works() {
+    let query = TestUser::find().take(20);
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users LIMIT 20");
+}
+
+#[test]
+fn order_by_with_limit_works() {
+    let query = TestUser::find().order_by(TestUser::name.asc()).take(20);
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC LIMIT 20");
+}
+
+#[test]
+fn offset_works() {
+    let query = TestUser::find().skip(40);
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users OFFSET 40");
+}
+
+#[test]
+fn limit_with_offset_works() {
+    let query = TestUser::find().take(20).skip(40);
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users LIMIT 20 OFFSET 40");
+}
+
+#[test]
+fn order_by_limit_offset_works() {
+    let query = TestUser::find()
+        .order_by(TestUser::id.asc())
+        .take(20)
+        .skip(40);
+
+    let sql = query.build_sql();
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users ORDER BY id ASC LIMIT 20 OFFSET 40"
+    );
+}
+#[test]
+fn distinct_works() {
+    let query = TestUser::find().distinct();
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT DISTINCT id, name FROM users");
+}
+
+#[test]
+fn distinct_with_order_by_limit_offset_works() {
+    let query = TestUser::find()
+        .distinct()
+        .order_by(TestUser::name.asc())
+        .take(20)
+        .skip(40);
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT DISTINCT id, name FROM users ORDER BY name ASC LIMIT 20 OFFSET 40"
+    );
+}
+
+#[test]
+fn group_by_works() {
+    let query = TestUser::find().group_by(TestUser::name.column());
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT id, name FROM users GROUP BY name");
+}
+#[test]
+fn group_by_with_order_by_limit_offset_works() {
+    let query = TestUser::find()
+        .group_by(TestUser::name.column())
+        .order_by(TestUser::name.asc())
+        .take(20)
+        .skip(40);
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users GROUP BY name ORDER BY name ASC LIMIT 20 OFFSET 40"
+    );
+}
+#[test]
+fn having_works() {
+    let query = TestUser::find()
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.gt(10));
+    let sql = query.build_sql();
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users GROUP BY name HAVING id > $1"
+    );
+}
+#[test]
+fn where_and_having_work_together() {
+    let query = TestUser::find()
+        .where_(TestUser::id.gt(5))
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.gt(10));
+    let sql = query.build_sql();
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users WHERE id > $1 GROUP BY name HAVING id > $2"
+    );
+}
+#[test]
+fn where_and_having_collect_bind_values_in_order() {
+    let query = TestUser::find()
+        .where_(TestUser::id.gt(5))
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.gt(10));
+    let mut values = Vec::new();
+    if let Some(expression) = &query.statement.where_clause {
+        collect_bind_values(expression, &mut values);
     }
-    #[test]
-    fn limit_works() {
-        let query = TestUser::find().take(20);
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users LIMIT 20");
+    if let Some(expression) = &query.statement.having {
+        collect_bind_values(expression, &mut values);
     }
-
-    #[test]
-    fn order_by_with_limit_works() {
-        let query = TestUser::find().order_by(TestUser::name.asc()).take(20);
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users ORDER BY name ASC LIMIT 20");
+    assert_eq!(values.len(), 2);
+    match &values[0] {
+        BindValue::I64(value) => assert_eq!(*value, 5),
+        _ => panic!("expected first bind value to be i64"),
     }
-
-    #[test]
-    fn offset_works() {
-        let query = TestUser::find().skip(40);
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users OFFSET 40");
+    match &values[1] {
+        BindValue::I64(value) => assert_eq!(*value, 10),
+        _ => panic!("expected second bind value to be i64"),
     }
+}
+#[test]
+fn count_select_works() {
+    let query = TestUser::find().select(TestUser::id.count());
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT COUNT(id) FROM users");
+}
+#[test]
+fn count_with_group_by_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.count())
+        .group_by(TestUser::name.column());
 
-    #[test]
-    fn limit_with_offset_works() {
-        let query = TestUser::find().take(20).skip(40);
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users LIMIT 20 OFFSET 40");
-    }
+    let sql = query.build_sql();
+    assert_eq!(sql, "SELECT name, COUNT(id) FROM users GROUP BY name");
+}
+#[test]
+fn count_with_group_by_and_having_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.count())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.count().gt(1));
 
-    #[test]
-    fn order_by_limit_offset_works() {
-        let query = TestUser::find()
-            .order_by(TestUser::id.asc())
-            .take(20)
-            .skip(40);
+    let sql = query.build_sql();
 
-        let sql = query.build_sql();
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users ORDER BY id ASC LIMIT 20 OFFSET 40"
-        );
-    }
-    #[test]
-    fn distinct_works() {
-        let query = TestUser::find().distinct();
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT DISTINCT id, name FROM users");
-    }
+    assert_eq!(
+        sql,
+        "SELECT name, COUNT(id) FROM users GROUP BY name HAVING COUNT(id) > $1"
+    );
+}
+#[test]
+fn aggregate_having_collect_bind_value_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.count())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.count().gt(1));
 
-    #[test]
-    fn distinct_with_order_by_limit_offset_works() {
-        let query = TestUser::find()
-            .distinct()
-            .order_by(TestUser::name.asc())
-            .take(20)
-            .skip(40);
+    let mut values = Vec::new();
 
-        let sql = query.build_sql();
-
-        assert_eq!(
-            sql,
-            "SELECT DISTINCT id, name FROM users ORDER BY name ASC LIMIT 20 OFFSET 40"
-        );
-    }
-
-    #[test]
-    fn group_by_works() {
-        let query = TestUser::find().group_by(TestUser::name.column());
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT id, name FROM users GROUP BY name");
-    }
-    #[test]
-    fn group_by_with_order_by_limit_offset_works() {
-        let query = TestUser::find()
-            .group_by(TestUser::name.column())
-            .order_by(TestUser::name.asc())
-            .take(20)
-            .skip(40);
-
-        let sql = query.build_sql();
-
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users GROUP BY name ORDER BY name ASC LIMIT 20 OFFSET 40"
-        );
-    }
-    #[test]
-    fn having_works() {
-        let query = TestUser::find()
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.gt(10));
-        let sql = query.build_sql();
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users GROUP BY name HAVING id > $1"
-        );
-    }
-    #[test]
-    fn where_and_having_work_together() {
-        let query = TestUser::find()
-            .where_(TestUser::id.gt(5))
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.gt(10));
-        let sql = query.build_sql();
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users WHERE id > $1 GROUP BY name HAVING id > $2"
-        );
-    }
-    #[test]
-    fn where_and_having_collect_bind_values_in_order() {
-        let query = TestUser::find()
-            .where_(TestUser::id.gt(5))
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.gt(10));
-        let mut values = Vec::new();
-        if let Some(expression) = &query.statement.where_clause {
-            collect_bind_values(expression, &mut values);
-        }
-        if let Some(expression) = &query.statement.having {
-            collect_bind_values(expression, &mut values);
-        }
-        assert_eq!(values.len(), 2);
-        match &values[0] {
-            BindValue::I64(value) => assert_eq!(*value, 5),
-            _ => panic!("expected first bind value to be i64"),
-        }
-        match &values[1] {
-            BindValue::I64(value) => assert_eq!(*value, 10),
-            _ => panic!("expected second bind value to be i64"),
-        }
-    }
-    #[test]
-    fn count_select_works() {
-        let query = TestUser::find().select(TestUser::id.count());
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT COUNT(id) FROM users");
-    }
-    #[test]
-    fn count_with_group_by_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.count())
-            .group_by(TestUser::name.column());
-
-        let sql = query.build_sql();
-        assert_eq!(sql, "SELECT name, COUNT(id) FROM users GROUP BY name");
-    }
-    #[test]
-    fn count_with_group_by_and_having_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.count())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.count().gt(1));
-
-        let sql = query.build_sql();
-
-        assert_eq!(
-            sql,
-            "SELECT name, COUNT(id) FROM users GROUP BY name HAVING COUNT(id) > $1"
-        );
-    }
-    #[test]
-    fn aggregate_having_collect_bind_value_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.count())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.count().gt(1));
-
-        let mut values = Vec::new();
-
-        if let Some(expression) = &query.statement.having {
-            collect_bind_values(expression, &mut values);
-        }
-
-        assert_eq!(values.len(), 1);
-
-        match &values[0] {
-            BindValue::I64(value) => assert_eq!(*value, 1),
-            _ => panic!("expected aggregate HAVING bind value to be i64"),
-        }
-    }
-    #[test]
-    fn sum_select_works() {
-        let query = TestUser::find().select(TestUser::id.sum());
-        assert_eq!(query.build_sql(), "SELECT SUM(id) FROM users");
-    }
-    #[test]
-    fn sum_with_where_works() {
-        let query = TestUser::find()
-            .where_(TestUser::name.eq("Fakhir"))
-            .select(TestUser::id.sum());
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT SUM(id) FROM users WHERE name = $1"
-        );
-    }
-    #[test]
-    fn sum_with_group_by_and_having_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.sum())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.sum().gt(2));
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, SUM(id) FROM users GROUP BY name HAVING SUM(id) > $1"
-        );
-    }
-    #[test]
-    fn avg_select_works() {
-        let query = TestUser::find().select(TestUser::id.avg());
-
-        assert_eq!(query.build_sql(), "SELECT AVG(id) FROM users");
-    }
-    #[test]
-    fn avg_with_where_works() {
-        let query = TestUser::find()
-            .where_(TestUser::name.eq("Fakhir"))
-            .select(TestUser::id.avg());
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT AVG(id) FROM users WHERE name = $1"
-        );
-    }
-    #[test]
-    fn avg_with_group_by_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.avg())
-            .group_by(TestUser::name.column());
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, AVG(id) FROM users GROUP BY name"
-        );
-    }
-    #[test]
-    fn avg_with_group_by_and_having_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.avg())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.avg().gt(2));
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, AVG(id) FROM users GROUP BY name HAVING AVG(id) > $1"
-        );
+    if let Some(expression) = &query.statement.having {
+        collect_bind_values(expression, &mut values);
     }
 
-    #[test]
-    fn min_select_works() {
-        let query = TestUser::find().select(TestUser::id.min());
+    assert_eq!(values.len(), 1);
 
-        assert_eq!(query.build_sql(), "SELECT MIN(id) FROM users");
+    match &values[0] {
+        BindValue::I64(value) => assert_eq!(*value, 1),
+        _ => panic!("expected aggregate HAVING bind value to be i64"),
     }
+}
+#[test]
+fn sum_select_works() {
+    let query = TestUser::find().select(TestUser::id.sum());
+    assert_eq!(query.build_sql(), "SELECT SUM(id) FROM users");
+}
+#[test]
+fn sum_with_where_works() {
+    let query = TestUser::find()
+        .where_(TestUser::name.eq("Fakhir"))
+        .select(TestUser::id.sum());
 
-    #[test]
-    fn max_select_works() {
-        let query = TestUser::find().select(TestUser::id.max());
+    assert_eq!(
+        query.build_sql(),
+        "SELECT SUM(id) FROM users WHERE name = $1"
+    );
+}
+#[test]
+fn sum_with_group_by_and_having_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.sum())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.sum().gt(2));
 
-        assert_eq!(query.build_sql(), "SELECT MAX(id) FROM users");
-    }
-    #[test]
-    fn min_with_group_by_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.min())
-            .group_by(TestUser::name.column());
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, SUM(id) FROM users GROUP BY name HAVING SUM(id) > $1"
+    );
+}
+#[test]
+fn avg_select_works() {
+    let query = TestUser::find().select(TestUser::id.avg());
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, MIN(id) FROM users GROUP BY name"
-        );
-    }
+    assert_eq!(query.build_sql(), "SELECT AVG(id) FROM users");
+}
+#[test]
+fn avg_with_where_works() {
+    let query = TestUser::find()
+        .where_(TestUser::name.eq("Fakhir"))
+        .select(TestUser::id.avg());
 
-    #[test]
-    fn max_with_group_by_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.max())
-            .group_by(TestUser::name.column());
+    assert_eq!(
+        query.build_sql(),
+        "SELECT AVG(id) FROM users WHERE name = $1"
+    );
+}
+#[test]
+fn avg_with_group_by_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.avg())
+        .group_by(TestUser::name.column());
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, MAX(id) FROM users GROUP BY name"
-        );
-    }
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, AVG(id) FROM users GROUP BY name"
+    );
+}
+#[test]
+fn avg_with_group_by_and_having_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.avg())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.avg().gt(2));
 
-    #[test]
-    fn min_with_group_by_and_having_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.min())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.min().gt(1));
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, AVG(id) FROM users GROUP BY name HAVING AVG(id) > $1"
+    );
+}
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, MIN(id) FROM users GROUP BY name HAVING MIN(id) > $1"
-        );
-    }
+#[test]
+fn min_select_works() {
+    let query = TestUser::find().select(TestUser::id.min());
 
-    #[test]
-    fn max_with_group_by_and_having_works() {
-        let query = TestUser::find()
-            .select(TestUser::name.select())
-            .select(TestUser::id.max())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.max().gt(1));
+    assert_eq!(query.build_sql(), "SELECT MIN(id) FROM users");
+}
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT name, MAX(id) FROM users GROUP BY name HAVING MAX(id) > $1"
-        );
-    }
-    #[test]
-    fn inner_join_works() {
-        let query = TestUser::find().inner_join(TestUser::posts);
+#[test]
+fn max_select_works() {
+    let query = TestUser::find().select(TestUser::id.max());
 
-        let sql = query.build_sql();
+    assert_eq!(query.build_sql(), "SELECT MAX(id) FROM users");
+}
+#[test]
+fn min_with_group_by_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.min())
+        .group_by(TestUser::name.column());
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
-        );
-    }
-    #[test]
-    fn left_join_works() {
-        let query = TestUser::find().left_join(TestPost::id.eq_column(TestUser::id));
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, MIN(id) FROM users GROUP BY name"
+    );
+}
 
-        let sql = query.build_sql();
+#[test]
+fn max_with_group_by_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.max())
+        .group_by(TestUser::name.column());
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users LEFT JOIN posts ON posts.id = users.id"
-        );
-    }
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, MAX(id) FROM users GROUP BY name"
+    );
+}
 
-    #[test]
-    fn right_join_works() {
-        let query = TestUser::find().right_join(TestPost::id.eq_column(TestUser::id));
+#[test]
+fn min_with_group_by_and_having_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.min())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.min().gt(1));
 
-        let sql = query.build_sql();
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, MIN(id) FROM users GROUP BY name HAVING MIN(id) > $1"
+    );
+}
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users RIGHT JOIN posts ON posts.id = users.id"
-        );
-    }
+#[test]
+fn max_with_group_by_and_having_works() {
+    let query = TestUser::find()
+        .select(TestUser::name.select())
+        .select(TestUser::id.max())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.max().gt(1));
 
-    #[test]
-    fn full_join_works() {
-        let query = TestUser::find().full_join(TestPost::id.eq_column(TestUser::id));
+    assert_eq!(
+        query.build_sql(),
+        "SELECT name, MAX(id) FROM users GROUP BY name HAVING MAX(id) > $1"
+    );
+}
+#[test]
+fn inner_join_works() {
+    let query = TestUser::find().inner_join(TestUser::posts);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users FULL JOIN posts ON posts.id = users.id"
-        );
-    }
-    #[test]
-    fn relation_inner_join_works() {
-        let query = TestUser::find().inner_join(TestUser::posts);
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
+    );
+}
+#[test]
+fn left_join_works() {
+    let query = TestUser::find().left_join(TestPost::id.eq_column(TestUser::id));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
-        );
-    }
-    #[test]
-    fn relation_left_join_works() {
-        let query = TestUser::find().left_join(TestUser::posts);
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users LEFT JOIN posts ON posts.id = users.id"
+    );
+}
 
-        let sql = query.build_sql();
+#[test]
+fn right_join_works() {
+    let query = TestUser::find().right_join(TestPost::id.eq_column(TestUser::id));
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users LEFT JOIN posts ON users.id = posts.user_id"
-        );
-    }
+    let sql = query.build_sql();
 
-    #[test]
-    fn relation_right_join_works() {
-        let query = TestUser::find().right_join(TestUser::posts);
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users RIGHT JOIN posts ON posts.id = users.id"
+    );
+}
 
-        let sql = query.build_sql();
+#[test]
+fn full_join_works() {
+    let query = TestUser::find().full_join(TestPost::id.eq_column(TestUser::id));
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users RIGHT JOIN posts ON users.id = posts.user_id"
-        );
-    }
+    let sql = query.build_sql();
 
-    #[test]
-    fn relation_full_join_works() {
-        let query = TestUser::find().full_join(TestUser::posts);
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users FULL JOIN posts ON posts.id = users.id"
+    );
+}
+#[test]
+fn relation_inner_join_works() {
+    let query = TestUser::find().inner_join(TestUser::posts);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users FULL JOIN posts ON users.id = posts.user_id"
-        );
-    }
-    #[test]
-    fn multiple_different_joins_work() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .left_join(TestUser::posts)
-            .right_join(TestUser::posts)
-            .full_join(TestUser::posts);
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users INNER JOIN posts ON users.id = posts.user_id"
+    );
+}
+#[test]
+fn relation_left_join_works() {
+    let query = TestUser::find().left_join(TestUser::posts);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users LEFT JOIN posts ON users.id = posts.user_id"
+    );
+}
+
+#[test]
+fn relation_right_join_works() {
+    let query = TestUser::find().right_join(TestUser::posts);
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users RIGHT JOIN posts ON users.id = posts.user_id"
+    );
+}
+
+#[test]
+fn relation_full_join_works() {
+    let query = TestUser::find().full_join(TestUser::posts);
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users FULL JOIN posts ON users.id = posts.user_id"
+    );
+}
+#[test]
+fn multiple_different_joins_work() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .left_join(TestUser::posts)
+        .right_join(TestUser::posts)
+        .full_join(TestUser::posts);
+
+    let sql = query.build_sql();
+
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          LEFT JOIN posts ON users.id = posts.user_id \
          RIGHT JOIN posts ON users.id = posts.user_id \
          FULL JOIN posts ON users.id = posts.user_id"
-        );
-    }
+    );
+}
 
-    #[test]
-    fn multiple_same_joins_work() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .inner_join(TestUser::posts)
-            .inner_join(TestUser::posts);
+#[test]
+fn multiple_same_joins_work() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .inner_join(TestUser::posts)
+        .inner_join(TestUser::posts);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          INNER JOIN posts ON users.id = posts.user_id \
          INNER JOIN posts ON users.id = posts.user_id"
-        );
-    }
-    #[test]
-    fn multiple_different_relation_joins_work() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .left_join(TestPost::comments);
+    );
+}
+#[test]
+fn multiple_different_relation_joins_work() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .left_join(TestPost::comments);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          LEFT JOIN comments ON posts.id = comments.post_id"
-        );
-    }
-    #[test]
-    fn join_with_where_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .where_(TestUser::name.eq("Fakhir"));
+    );
+}
+#[test]
+fn join_with_where_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .where_(TestUser::name.eq("Fakhir"));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          WHERE name = $1"
-        );
-    }
-    #[test]
-    fn join_with_order_by_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .order_by(TestUser::name.asc());
+    );
+}
+#[test]
+fn join_with_order_by_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .order_by(TestUser::name.asc());
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          ORDER BY name ASC"
-        );
-    }
-    #[test]
-    fn join_with_limit_and_offset_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .take(10)
-            .skip(5);
+    );
+}
+#[test]
+fn join_with_limit_and_offset_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .take(10)
+        .skip(5);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          LIMIT 10 OFFSET 5"
-        );
-    }
-    #[test]
-    fn join_with_group_by_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .group_by(TestUser::name.column());
+    );
+}
+#[test]
+fn join_with_group_by_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .group_by(TestUser::name.column());
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          GROUP BY name"
-        );
-    }
-    #[test]
-    fn complex_join_query_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .where_(TestUser::name.eq("Fakhir"))
-            .group_by(TestUser::name.column())
-            .order_by(TestUser::name.asc())
-            .take(10)
-            .skip(5);
+    );
+}
+#[test]
+fn complex_join_query_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .where_(TestUser::name.eq("Fakhir"))
+        .group_by(TestUser::name.column())
+        .order_by(TestUser::name.asc())
+        .take(10)
+        .skip(5);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          WHERE name = $1 \
          GROUP BY name \
          ORDER BY name ASC \
          LIMIT 10 OFFSET 5"
-        );
-    }
-    #[test]
-    fn cross_join_works() {
-        let query = TestUser::find().cross_join(TestPost::TABLE);
+    );
+}
+#[test]
+fn cross_join_works() {
+    let query = TestUser::find().cross_join(TestPost::TABLE);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(sql, "SELECT id, name FROM users CROSS JOIN posts");
-    }
-    #[test]
-    fn where_in_subquery_works() {
-        let subquery = TestUser::find().select(TestUser::id.select());
+    assert_eq!(sql, "SELECT id, name FROM users CROSS JOIN posts");
+}
+#[test]
+fn where_in_subquery_works() {
+    let subquery = TestUser::find().select(TestUser::id.select());
 
-        let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
+    let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          WHERE id IN (SELECT id FROM users)"
-        );
-    }
-    #[test]
-    fn complex_subquery_works() {
-        let subquery = TestUser::find()
-            .select(TestUser::id.select())
-            .where_(TestUser::name.eq("Fakhir"))
-            .group_by(TestUser::id.column())
-            .having(TestUser::name.eq("Fakhir"))
-            .order_by(TestUser::id.asc())
-            .take(10);
+    );
+}
+#[test]
+fn complex_subquery_works() {
+    let subquery = TestUser::find()
+        .select(TestUser::id.select())
+        .where_(TestUser::name.eq("Fakhir"))
+        .group_by(TestUser::id.column())
+        .having(TestUser::name.eq("Fakhir"))
+        .order_by(TestUser::id.asc())
+        .take(10);
 
-        let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
+    let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          WHERE id IN (SELECT id FROM users \
          WHERE name = $1 \
          GROUP BY id \
          HAVING name = $2 \
          ORDER BY id ASC \
          LIMIT 10)"
-        );
-    }
-    #[test]
-    fn with_relation_works() {
-        let query = TestUser::find().with(TestUser::posts);
+    );
+}
+#[test]
+fn with_relation_works() {
+    let query = TestUser::find().with(TestUser::posts);
 
-        assert_eq!(query.statement.relations.len(), 1);
+    assert_eq!(query.statement.relations.len(), 1);
 
-        let relation = &query.statement.relations[0];
+    let relation = &query.statement.relations[0];
 
-        assert_eq!(relation.to_table, "posts");
-        assert_eq!(relation.to_column.name(), "user_id");
-    }
-    #[test]
-    fn join_with_having_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .select(TestUser::name.select())
-            .select(TestUser::id.count())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.count().gt(2));
+    assert_eq!(relation.to_table, "posts");
+    assert_eq!(relation.to_column.name(), "user_id");
+}
+#[test]
+fn join_with_having_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .select(TestUser::name.select())
+        .select(TestUser::id.count())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.count().gt(2));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT name, COUNT(id) FROM users \
+    assert_eq!(
+        sql,
+        "SELECT name, COUNT(id) FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          GROUP BY name \
          HAVING COUNT(id) > $1"
-        );
-    }
+    );
+}
 
-    #[test]
-    fn join_with_where_and_having_works() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .where_(TestUser::name.eq("Fakhir"))
-            .select(TestUser::name.select())
-            .select(TestUser::id.count())
-            .group_by(TestUser::name.column())
-            .having(TestUser::id.count().gt(2));
+#[test]
+fn join_with_where_and_having_works() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .where_(TestUser::name.eq("Fakhir"))
+        .select(TestUser::name.select())
+        .select(TestUser::id.count())
+        .group_by(TestUser::name.column())
+        .having(TestUser::id.count().gt(2));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT name, COUNT(id) FROM users \
+    assert_eq!(
+        sql,
+        "SELECT name, COUNT(id) FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          WHERE name = $1 \
          GROUP BY name \
          HAVING COUNT(id) > $2"
-        );
-    }
+    );
+}
 
-    #[test]
-    fn multiple_relation_joins_with_where_work() {
-        let query = TestUser::find()
-            .inner_join(TestUser::posts)
-            .left_join(TestPost::comments)
-            .where_(TestUser::name.eq("Fakhir"));
+#[test]
+fn multiple_relation_joins_with_where_work() {
+    let query = TestUser::find()
+        .inner_join(TestUser::posts)
+        .left_join(TestPost::comments)
+        .where_(TestUser::name.eq("Fakhir"));
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          LEFT JOIN comments ON posts.id = comments.post_id \
          WHERE name = $1"
-        );
-    }
+    );
+}
 
-    #[test]
-    fn join_with_distinct_order_limit_offset_works() {
-        let query = TestUser::find()
-            .distinct()
-            .inner_join(TestUser::posts)
-            .order_by(TestUser::name.asc())
-            .take(10)
-            .skip(5);
+#[test]
+fn join_with_distinct_order_limit_offset_works() {
+    let query = TestUser::find()
+        .distinct()
+        .inner_join(TestUser::posts)
+        .order_by(TestUser::name.asc())
+        .take(10)
+        .skip(5);
 
-        let sql = query.build_sql();
+    let sql = query.build_sql();
 
-        assert_eq!(
-            sql,
-            "SELECT DISTINCT id, name FROM users \
+    assert_eq!(
+        sql,
+        "SELECT DISTINCT id, name FROM users \
          INNER JOIN posts ON users.id = posts.user_id \
          ORDER BY name ASC \
          LIMIT 10 OFFSET 5"
-        );
+    );
+}
+#[test]
+fn multiple_with_relations_work() {
+    let query = TestUser::find().with(TestUser::posts);
+
+    assert_eq!(query.statement.relations.len(), 1);
+
+    let relation = &query.statement.relations[0];
+
+    assert_eq!(relation.to_table, "posts");
+}
+#[test]
+fn nested_relation_metadata_works() {
+    let query = TestPost::find().with(TestPost::comments);
+
+    assert_eq!(query.statement.relations.len(), 1);
+
+    let relation = &query.statement.relations[0];
+
+    assert_eq!(relation.to_table, "comments");
+    assert_eq!(relation.to_column.name(), "post_id");
+}
+#[test]
+fn in_list_expression_works() {
+    let expression = crate::query::expression::Expression::Binary {
+        left: Box::new(crate::query::expression::Expression::Column(
+            TestPost::user_id.column(),
+        )),
+        operator: crate::query::expression::BinaryOperator::In,
+        right: Box::new(crate::query::expression::Expression::List(vec![
+            crate::query::expression::Expression::Value(crate::value::BindValue::I64(1)),
+            crate::query::expression::Expression::Value(crate::value::BindValue::I64(2)),
+            crate::query::expression::Expression::Value(crate::value::BindValue::I64(3)),
+        ])),
+    };
+
+    let mut index = 1;
+
+    let sql = crate::sql::compile_expression(&expression, &mut index);
+
+    assert_eq!(sql, "user_id IN ($1, $2, $3)");
+    assert_eq!(index, 4);
+}
+#[test]
+fn relation_foreign_key_in_works() {
+    let relation = TestUser::posts.info();
+
+    let expression = relation.foreign_key_in(vec![
+        crate::value::BindValue::I64(1),
+        crate::value::BindValue::I64(2),
+        crate::value::BindValue::I64(3),
+    ]);
+
+    let mut index = 1;
+
+    let sql = crate::sql::compile_expression(&expression, &mut index);
+
+    assert_eq!(sql, "posts.user_id IN ($1, $2, $3)");
+    assert_eq!(index, 4);
+}
+#[test]
+fn relation_foreign_key_in_collects_bind_values() {
+    let relation = TestUser::posts.info();
+
+    let expression = relation.foreign_key_in(vec![
+        crate::value::BindValue::I64(10),
+        crate::value::BindValue::I64(20),
+        crate::value::BindValue::I64(30),
+    ]);
+
+    let mut values = Vec::new();
+
+    crate::sql::collect_bind_values(&expression, &mut values);
+
+    assert_eq!(values.len(), 3);
+
+    match &values[0] {
+        crate::value::BindValue::I64(value) => assert_eq!(*value, 10),
+        _ => panic!("expected I64"),
     }
-    #[test]
-    fn multiple_with_relations_work() {
-        let query = TestUser::find().with(TestUser::posts);
 
-        assert_eq!(query.statement.relations.len(), 1);
-
-        let relation = &query.statement.relations[0];
-
-        assert_eq!(relation.to_table, "posts");
+    match &values[1] {
+        crate::value::BindValue::I64(value) => assert_eq!(*value, 20),
+        _ => panic!("expected I64"),
     }
-    #[test]
-    fn nested_relation_metadata_works() {
-        let query = TestPost::find().with(TestPost::comments);
 
-        assert_eq!(query.statement.relations.len(), 1);
-
-        let relation = &query.statement.relations[0];
-
-        assert_eq!(relation.to_table, "comments");
-        assert_eq!(relation.to_column.name(), "post_id");
+    match &values[2] {
+        crate::value::BindValue::I64(value) => assert_eq!(*value, 30),
+        _ => panic!("expected I64"),
     }
-    #[test]
-    fn in_list_expression_works() {
-        let expression = crate::query::expression::Expression::Binary {
-            left: Box::new(crate::query::expression::Expression::Column(
-                TestPost::user_id.column(),
-            )),
-            operator: crate::query::expression::BinaryOperator::In,
-            right: Box::new(crate::query::expression::Expression::List(vec![
-                crate::query::expression::Expression::Value(crate::value::BindValue::I64(1)),
-                crate::query::expression::Expression::Value(crate::value::BindValue::I64(2)),
-                crate::query::expression::Expression::Value(crate::value::BindValue::I64(3)),
-            ])),
-        };
+}
+#[test]
+fn relation_target_query_is_generic() {
+    let query = TestUser::posts.target_query();
 
-        let mut index = 1;
+    let sql = query.build_sql();
 
-        let sql = crate::sql::compile_expression(&expression, &mut index);
+    assert_eq!(sql, "SELECT id, title, user_id FROM posts");
+}
+#[test]
+fn relation_target_query_applies_filter() {
+    let relation = TestUser::posts.info();
 
-        assert_eq!(sql, "user_id IN ($1, $2, $3)");
-        assert_eq!(index, 4);
-    }
-    #[test]
-    fn relation_foreign_key_in_works() {
-        let relation = TestUser::posts.info();
-
-        let expression = relation.foreign_key_in(vec![
-            crate::value::BindValue::I64(1),
-            crate::value::BindValue::I64(2),
-            crate::value::BindValue::I64(3),
-        ]);
-
-        let mut index = 1;
-
-        let sql = crate::sql::compile_expression(&expression, &mut index);
-
-        assert_eq!(sql, "posts.user_id IN ($1, $2, $3)");
-        assert_eq!(index, 4);
-    }
-    #[test]
-    fn relation_foreign_key_in_collects_bind_values() {
-        let relation = TestUser::posts.info();
-
-        let expression = relation.foreign_key_in(vec![
+    let query = TestUser::posts.target_query().apply_relation_filter(
+        &relation,
+        vec![
             crate::value::BindValue::I64(10),
             crate::value::BindValue::I64(20),
             crate::value::BindValue::I64(30),
-        ]);
+        ],
+    );
 
-        let mut values = Vec::new();
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, title, user_id FROM posts WHERE posts.user_id IN ($1, $2, $3)"
+    );
+}
+#[test]
+fn relation_target_query_preserves_existing_filter() {
+    let relation = TestUser::posts.info();
 
-        crate::sql::collect_bind_values(&expression, &mut values);
-
-        assert_eq!(values.len(), 3);
-
-        match &values[0] {
-            crate::value::BindValue::I64(value) => assert_eq!(*value, 10),
-            _ => panic!("expected I64"),
-        }
-
-        match &values[1] {
-            crate::value::BindValue::I64(value) => assert_eq!(*value, 20),
-            _ => panic!("expected I64"),
-        }
-
-        match &values[2] {
-            crate::value::BindValue::I64(value) => assert_eq!(*value, 30),
-            _ => panic!("expected I64"),
-        }
-    }
-    #[test]
-    fn relation_target_query_is_generic() {
-        let query = TestUser::posts.target_query();
-
-        let sql = query.build_sql();
-
-        assert_eq!(sql, "SELECT id, title, user_id FROM posts");
-    }
-    #[test]
-    fn relation_target_query_applies_filter() {
-        let relation = TestUser::posts.info();
-
-        let query = TestUser::posts.target_query().apply_relation_filter(
+    let query = TestUser::posts
+        .target_query()
+        .where_(TestPost::title.eq("Hello"))
+        .apply_relation_filter(
             &relation,
             vec![
                 crate::value::BindValue::I64(10),
                 crate::value::BindValue::I64(20),
-                crate::value::BindValue::I64(30),
             ],
         );
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, title, user_id FROM posts WHERE posts.user_id IN ($1, $2, $3)"
-        );
-    }
-    #[test]
-    fn relation_target_query_preserves_existing_filter() {
-        let relation = TestUser::posts.info();
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, title, user_id FROM posts WHERE title = $1 AND posts.user_id IN ($2, $3)"
+    );
+}
+#[test]
+fn query_compile_returns_sql_and_binds() {
+    let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
 
-        let query = TestUser::posts
-            .target_query()
-            .where_(TestPost::title.eq("Hello"))
-            .apply_relation_filter(
-                &relation,
-                vec![
-                    crate::value::BindValue::I64(10),
-                    crate::value::BindValue::I64(20),
-                ],
-            );
+    let compiled = query.compile();
 
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, title, user_id FROM posts WHERE title = $1 AND posts.user_id IN ($2, $3)"
-        );
-    }
-    #[test]
-    fn query_compile_returns_sql_and_binds() {
-        let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
+    assert_eq!(compiled.sql, "SELECT id, name FROM users WHERE name = $1");
 
-        let compiled = query.compile();
+    assert_eq!(compiled.binds.len(), 1);
+}
+#[test]
+fn count_sql_works() {
+    let query = TestUser::find();
 
-        assert_eq!(compiled.sql, "SELECT id, name FROM users WHERE name = $1");
+    assert_eq!(query.build_count_sql(), "SELECT COUNT(*) FROM users");
+}
+#[test]
+fn count_sql_with_where_works() {
+    let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
 
-        assert_eq!(compiled.binds.len(), 1);
-    }
-    #[test]
-    fn count_sql_works() {
-        let query = TestUser::find();
-
-        assert_eq!(query.build_count_sql(), "SELECT COUNT(*) FROM users");
-    }
-    #[test]
-    fn count_sql_with_where_works() {
-        let query = TestUser::find().where_(TestUser::name.eq("Fakhir"));
-
-        assert_eq!(
-            query.build_count_sql(),
-            "SELECT COUNT(*) FROM users WHERE name = $1"
-        );
-    }
-    #[test]
-    fn relation_parent_key_values_work() {
-        let parents = vec![
-            TestUserModel {
-                id: 1,
-                name: "Fakhir".to_string(),
-                posts: vec![],
-                profile: None,
-                roles: vec![
-                    Arc::new(TestRoleModel {
-                        id: 1,
-                        name: "Admin".to_string(),
-                    }),
-                    Arc::new(TestRoleModel {
-                        id: 2,
-                        name: "Editor".to_string(),
-                    }),
-                ],
-            },
-            TestUserModel {
-                id: 2,
-                name: "Ali".to_string(),
-                posts: vec![],
-                profile: None,
-                roles: vec![Arc::new(TestRoleModel {
+    assert_eq!(
+        query.build_count_sql(),
+        "SELECT COUNT(*) FROM users WHERE name = $1"
+    );
+}
+#[test]
+fn relation_parent_key_values_work() {
+    let parents = vec![
+        TestUserModel {
+            id: 1,
+            name: "Fakhir".to_string(),
+            posts: vec![],
+            profile: None,
+            roles: vec![
+                Arc::new(TestRoleModel {
+                    id: 1,
+                    name: "Admin".to_string(),
+                }),
+                Arc::new(TestRoleModel {
                     id: 2,
                     name: "Editor".to_string(),
-                })],
-            },
-            TestUserModel {
-                id: 5,
-                name: "Ahmed".to_string(),
-                posts: vec![],
-                profile: None,
-                roles: vec![], // No roles
-            },
-        ];
-
-        let values = TestUser::posts.parent_key_values(&parents);
-
-        assert_eq!(values.len(), 3);
-
-        match &values[0] {
-            BindValue::I64(value) => assert_eq!(*value, 1),
-            _ => panic!("expected I64"),
-        }
-
-        match &values[1] {
-            BindValue::I64(value) => assert_eq!(*value, 2),
-            _ => panic!("expected I64"),
-        }
-
-        match &values[2] {
-            BindValue::I64(value) => assert_eq!(*value, 5),
-            _ => panic!("expected I64"),
-        }
-    }
-    #[test]
-    fn many_to_one_relation_works() {
-        let relation = TestPost::user;
-
-        assert_eq!(relation.info().to_table, "users");
-        assert_eq!(relation.info().to_column.name(), "id");
-    }
-    #[test]
-    fn many_to_one_relation_target_query_works() {
-        let query = TestPost::user.target_query();
-
-        assert_eq!(query.build_sql(), "SELECT id, name FROM users");
-    }
-    #[test]
-    fn many_to_one_relation_target_filter_works() {
-        let relation = TestPost::user.info();
-
-        let query = TestPost::user
-            .target_query()
-            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
-        );
-    }
-    #[test]
-    fn one_to_one_relation_target_filter_works() {
-        let relation = TestUser::profile.info();
-
-        let query = TestUser::profile
-            .target_query()
-            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, user_id, bio FROM profiles WHERE profiles.user_id IN ($1, $2)"
-        );
-    }
-    #[test]
-    fn many_to_one_relation_sql_works() {
-        let relation = TestPost::user.info();
-
-        let query = TestPost::user
-            .target_query()
-            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
-        );
-    }
-    #[test]
-    fn many_to_many_relation_sql_works() {
-        let relation = TestUser::roles.info();
-
-        let query = TestUser::roles
-            .target_query()
-            .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
-
-        assert_eq!(
-            query.build_sql(),
-            "SELECT id, name FROM roles WHERE roles.id IN ($1, $2)"
-        );
-    }
-    #[tokio::test]
-    async fn user_create_works() {
-        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
-            .await
-            .unwrap();
-
-        let user = TestUser::create(
-            &db,
-            TestUserCreate {
-                name: "CRUD Test".into(),
-            },
-        )
-        .await
-        .unwrap();
-
-        assert!(user.id > 0);
-        assert_eq!(user.name, "CRUD Test");
-    }
-    #[tokio::test]
-    async fn user_update_works() {
-        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
-            .await
-            .unwrap();
-
-        let user = TestUser::create(
-            &db,
-            TestUserCreate {
-                name: "Before Update".into(),
-            },
-        )
-        .await
-        .unwrap();
-
-        let updated = TestUser::update(
-            &db,
-            user.id,
-            TestUserUpdate {
-                name: Some("After Update".into()),
-            },
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(updated.id, user.id);
-        assert_eq!(updated.name, "After Update");
-    }
-    #[tokio::test]
-    async fn user_delete_works() {
-        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
-            .await
-            .unwrap();
-
-        let user = TestUser::create(
-            &db,
-            TestUserCreate {
-                name: "Delete Test".into(),
-            },
-        )
-        .await
-        .unwrap();
-
-        let affected = TestUser::delete(&db, user.id).await.unwrap();
-
-        assert_eq!(affected, 1);
-
-        let row = sqlx::query("SELECT id FROM users WHERE id = $1")
-            .bind(user.id)
-            .fetch_optional(&db)
-            .await
-            .unwrap();
-
-        assert!(row.is_none());
-    }
-
-    #[tokio::test]
-    async fn user_create_many_works() {
-        let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
-            .await
-            .unwrap();
-
-        let users = TestUser::create_many(
-            &db,
-            vec![
-                TestUserCreate {
-                    name: "Create Many 1".into(),
-                },
-                TestUserCreate {
-                    name: "Create Many 2".into(),
-                },
-                TestUserCreate {
-                    name: "Create Many 3".into(),
-                },
+                }),
             ],
-        )
+        },
+        TestUserModel {
+            id: 2,
+            name: "Ali".to_string(),
+            posts: vec![],
+            profile: None,
+            roles: vec![Arc::new(TestRoleModel {
+                id: 2,
+                name: "Editor".to_string(),
+            })],
+        },
+        TestUserModel {
+            id: 5,
+            name: "Ahmed".to_string(),
+            posts: vec![],
+            profile: None,
+            roles: vec![], // No roles
+        },
+    ];
+
+    let values = TestUser::posts.parent_key_values(&parents);
+
+    assert_eq!(values.len(), 3);
+
+    match &values[0] {
+        BindValue::I64(value) => assert_eq!(*value, 1),
+        _ => panic!("expected I64"),
+    }
+
+    match &values[1] {
+        BindValue::I64(value) => assert_eq!(*value, 2),
+        _ => panic!("expected I64"),
+    }
+
+    match &values[2] {
+        BindValue::I64(value) => assert_eq!(*value, 5),
+        _ => panic!("expected I64"),
+    }
+}
+#[test]
+fn many_to_one_relation_works() {
+    let relation = TestPost::user;
+
+    assert_eq!(relation.info().to_table, "users");
+    assert_eq!(relation.info().to_column.name(), "id");
+}
+#[test]
+fn many_to_one_relation_target_query_works() {
+    let query = TestPost::user.target_query();
+
+    assert_eq!(query.build_sql(), "SELECT id, name FROM users");
+}
+#[test]
+fn many_to_one_relation_target_filter_works() {
+    let relation = TestPost::user.info();
+
+    let query = TestPost::user
+        .target_query()
+        .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
+    );
+}
+#[test]
+fn one_to_one_relation_target_filter_works() {
+    let relation = TestUser::profile.info();
+
+    let query = TestUser::profile
+        .target_query()
+        .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, user_id, bio FROM profiles WHERE profiles.user_id IN ($1, $2)"
+    );
+}
+#[test]
+fn many_to_one_relation_sql_works() {
+    let relation = TestPost::user.info();
+
+    let query = TestPost::user
+        .target_query()
+        .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, name FROM users WHERE users.id IN ($1, $2)"
+    );
+}
+#[test]
+fn many_to_many_relation_sql_works() {
+    let relation = TestUser::roles.info();
+
+    let query = TestUser::roles
+        .target_query()
+        .apply_relation_filter(&relation, vec![BindValue::I64(1), BindValue::I64(2)]);
+
+    assert_eq!(
+        query.build_sql(),
+        "SELECT id, name FROM roles WHERE roles.id IN ($1, $2)"
+    );
+}
+#[tokio::test]
+async fn user_create_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
         .await
         .unwrap();
 
-        assert_eq!(users.len(), 3);
+    let user = TestUser::create(
+        &db,
+        TestUserCreate {
+            name: "CRUD Test".into(),
+        },
+    )
+    .await
+    .unwrap();
 
-        assert!(users[0].id > 0);
-        assert!(users[1].id > 0);
-        assert!(users[2].id > 0);
+    assert!(user.id > 0);
+    assert_eq!(user.name, "CRUD Test");
+}
+#[tokio::test]
+async fn user_update_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
 
-        assert_eq!(users[0].name, "Create Many 1");
-        assert_eq!(users[1].name, "Create Many 2");
-        assert_eq!(users[2].name, "Create Many 3");
+    let user = TestUser::create(
+        &db,
+        TestUserCreate {
+            name: "Before Update".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let updated = TestUser::update(
+        &db,
+        user.id,
+        TestUserUpdate {
+            name: Some("After Update".into()),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated.id, user.id);
+    assert_eq!(updated.name, "After Update");
+}
+#[tokio::test]
+async fn user_delete_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let user = TestUser::create(
+        &db,
+        TestUserCreate {
+            name: "Delete Test".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::delete(&db, user.id).await.unwrap();
+
+    assert_eq!(affected, 1);
+
+    let row = sqlx::query("SELECT id FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_optional(&db)
+        .await
+        .unwrap();
+
+    assert!(row.is_none());
+}
+
+#[tokio::test]
+async fn user_create_many_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let users = TestUser::create_many(
+        &db,
+        vec![
+            TestUserCreate {
+                name: "Create Many 1".into(),
+            },
+            TestUserCreate {
+                name: "Create Many 2".into(),
+            },
+            TestUserCreate {
+                name: "Create Many 3".into(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(users.len(), 3);
+
+    assert!(users[0].id > 0);
+    assert!(users[1].id > 0);
+    assert!(users[2].id > 0);
+
+    assert_eq!(users[0].name, "Create Many 1");
+    assert_eq!(users[1].name, "Create Many 2");
+    assert_eq!(users[2].name, "Create Many 3");
+}
+#[test]
+fn user_update_many_sql_works() {
+    let condition = TestUser::name.eq("Bulk Update Target");
+
+    let data = TestUserUpdate {
+        name: Some("Bulk Updated".into()),
+    };
+
+    let columns = data.columns();
+    let values = data.values();
+
+    let condition_expression = condition.into_ast();
+
+    let mut next_placeholder = 1;
+
+    let set_clause = columns
+        .iter()
+        .map(|column| {
+            let placeholder = format!("${}", next_placeholder);
+            next_placeholder += 1;
+
+            format!("{} = {}", column, placeholder)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let where_clause = crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
+
+    let sql = format!(
+        "UPDATE {} SET {} WHERE {}",
+        TestUser::TABLE,
+        set_clause,
+        where_clause
+    );
+
+    assert_eq!(sql, "UPDATE users SET name = $1 WHERE name = $2");
+
+    let mut binds = values;
+
+    crate::sql::collect_bind_values(&condition_expression, &mut binds);
+
+    assert_eq!(binds.len(), 2);
+
+    match &binds[0] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Updated");
+        }
+        _ => panic!("Expected string bind"),
     }
-    #[test]
-    fn user_update_many_sql_works() {
-        let condition = TestUser::name.eq("Bulk Update Target");
 
-        let data = TestUserUpdate {
-            name: Some("Bulk Updated".into()),
-        };
+    match &binds[1] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Update Target");
+        }
+        _ => panic!("Expected string bind"),
+    }
+}
 
-        let columns = data.columns();
-        let values = data.values();
+#[test]
+fn user_delete_many_sql_works() {
+    let condition = TestUser::name.eq("Bulk Delete Target");
 
-        let condition_expression = condition.into_ast();
+    let condition_expression = condition.into_ast();
 
-        let mut next_placeholder = 1;
+    let mut next_placeholder = 1;
 
-        let set_clause = columns
-            .iter()
-            .map(|column| {
-                let placeholder = format!("${}", next_placeholder);
-                next_placeholder += 1;
+    let where_clause = crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
 
-                format!("{} = {}", column, placeholder)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+    let sql = format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause);
 
-        let where_clause =
-            crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
+    assert_eq!(sql, "DELETE FROM users WHERE name = $1");
 
-        let sql = format!(
+    let mut binds = Vec::new();
+
+    crate::sql::collect_bind_values(&condition_expression, &mut binds);
+
+    assert_eq!(binds.len(), 1);
+
+    match &binds[0] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Delete Target");
+        }
+        _ => panic!("Expected string bind"),
+    }
+}
+#[test]
+fn user_update_many_bind_order_works() {
+    let condition = TestUser::name.eq("Bulk Update Target");
+
+    let data = TestUserUpdate {
+        name: Some("Bulk Updated".into()),
+    };
+
+    let columns = data.columns();
+    let values = data.values();
+
+    let expression = condition.into_ast();
+
+    let mut next_placeholder = 1;
+
+    let set_clause = columns
+        .iter()
+        .map(|column| {
+            let placeholder = format!("${}", next_placeholder);
+            next_placeholder += 1;
+
+            format!("{} = {}", column, placeholder)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+
+    assert_eq!(
+        format!(
             "UPDATE {} SET {} WHERE {}",
             TestUser::TABLE,
             set_clause,
             where_clause
-        );
+        ),
+        "UPDATE users SET name = $1 WHERE name = $2"
+    );
 
-        assert_eq!(sql, "UPDATE users SET name = $1 WHERE name = $2");
+    let mut binds = values;
 
-        let mut binds = values;
+    crate::sql::collect_bind_values(&expression, &mut binds);
 
-        crate::sql::collect_bind_values(&condition_expression, &mut binds);
+    assert_eq!(binds.len(), 2);
 
-        assert_eq!(binds.len(), 2);
-
-        match &binds[0] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Updated");
-            }
-            _ => panic!("Expected string bind"),
+    match &binds[0] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Updated");
         }
-
-        match &binds[1] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Update Target");
-            }
-            _ => panic!("Expected string bind"),
-        }
+        _ => panic!("Expected string bind"),
     }
 
-    #[test]
-    fn user_delete_many_sql_works() {
-        let condition = TestUser::name.eq("Bulk Delete Target");
-
-        let condition_expression = condition.into_ast();
-
-        let mut next_placeholder = 1;
-
-        let where_clause =
-            crate::sql::compile_expression(&condition_expression, &mut next_placeholder);
-
-        let sql = format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause);
-
-        assert_eq!(sql, "DELETE FROM users WHERE name = $1");
-
-        let mut binds = Vec::new();
-
-        crate::sql::collect_bind_values(&condition_expression, &mut binds);
-
-        assert_eq!(binds.len(), 1);
-
-        match &binds[0] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Delete Target");
-            }
-            _ => panic!("Expected string bind"),
+    match &binds[1] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Update Target");
         }
+        _ => panic!("Expected string bind"),
     }
-    #[test]
-    fn user_update_many_bind_order_works() {
-        let condition = TestUser::name.eq("Bulk Update Target");
+}
+#[test]
+fn user_delete_many_bind_order_works() {
+    let condition = TestUser::name.eq("Bulk Delete Target");
 
-        let data = TestUserUpdate {
-            name: Some("Bulk Updated".into()),
-        };
+    let expression = condition.into_ast();
 
-        let columns = data.columns();
-        let values = data.values();
+    let mut next_placeholder = 1;
 
-        let expression = condition.into_ast();
+    let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
 
-        let mut next_placeholder = 1;
+    assert_eq!(
+        format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause),
+        "DELETE FROM users WHERE name = $1"
+    );
 
-        let set_clause = columns
-            .iter()
-            .map(|column| {
-                let placeholder = format!("${}", next_placeholder);
-                next_placeholder += 1;
+    let mut binds = Vec::new();
 
-                format!("{} = {}", column, placeholder)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+    crate::sql::collect_bind_values(&expression, &mut binds);
 
-        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+    assert_eq!(binds.len(), 1);
 
-        assert_eq!(
-            format!(
-                "UPDATE {} SET {} WHERE {}",
-                TestUser::TABLE,
-                set_clause,
-                where_clause
-            ),
-            "UPDATE users SET name = $1 WHERE name = $2"
-        );
-
-        let mut binds = values;
-
-        crate::sql::collect_bind_values(&expression, &mut binds);
-
-        assert_eq!(binds.len(), 2);
-
-        match &binds[0] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Updated");
-            }
-            _ => panic!("Expected string bind"),
+    match &binds[0] {
+        BindValue::String(value) => {
+            assert_eq!(value, "Bulk Delete Target");
         }
-
-        match &binds[1] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Update Target");
-            }
-            _ => panic!("Expected string bind"),
-        }
+        _ => panic!("Expected string bind"),
     }
-    #[test]
-    fn user_delete_many_bind_order_works() {
-        let condition = TestUser::name.eq("Bulk Delete Target");
+}
+#[test]
+fn user_update_many_with_and_condition_works() {
+    let condition = TestUser::name.eq("Alice").and(TestUser::name.eq("Bob"));
 
-        let expression = condition.into_ast();
+    let data = TestUserUpdate {
+        name: Some("Updated".into()),
+    };
 
-        let mut next_placeholder = 1;
+    let columns = data.columns();
+    let expression = condition.into_ast();
 
-        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
+    let mut next_placeholder = 1;
 
-        assert_eq!(
-            format!("DELETE FROM {} WHERE {}", TestUser::TABLE, where_clause),
-            "DELETE FROM users WHERE name = $1"
-        );
+    let set_clause = columns
+        .iter()
+        .map(|column| {
+            let placeholder = format!("${}", next_placeholder);
+            next_placeholder += 1;
 
-        let mut binds = Vec::new();
+            format!("{} = {}", column, placeholder)
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
 
-        crate::sql::collect_bind_values(&expression, &mut binds);
+    let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
 
-        assert_eq!(binds.len(), 1);
-
-        match &binds[0] {
-            BindValue::String(value) => {
-                assert_eq!(value, "Bulk Delete Target");
-            }
-            _ => panic!("Expected string bind"),
-        }
-    }
-    #[test]
-    fn user_update_many_with_and_condition_works() {
-        let condition = TestUser::name.eq("Alice").and(TestUser::name.eq("Bob"));
-
-        let data = TestUserUpdate {
-            name: Some("Updated".into()),
-        };
-
-        let columns = data.columns();
-        let expression = condition.into_ast();
-
-        let mut next_placeholder = 1;
-
-        let set_clause = columns
-            .iter()
-            .map(|column| {
-                let placeholder = format!("${}", next_placeholder);
-                next_placeholder += 1;
-
-                format!("{} = {}", column, placeholder)
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-
-        let where_clause = crate::sql::compile_expression(&expression, &mut next_placeholder);
-
-        assert_eq!(
-            format!(
-                "UPDATE {} SET {} WHERE {}",
-                TestUser::TABLE,
-                set_clause,
-                where_clause
-            ),
-            "UPDATE users SET name = $1 WHERE name = $2 AND name = $3"
-        );
-    }
+    assert_eq!(
+        format!(
+            "UPDATE {} SET {} WHERE {}",
+            TestUser::TABLE,
+            set_clause,
+            where_clause
+        ),
+        "UPDATE users SET name = $1 WHERE name = $2 AND name = $3"
+    );
 }

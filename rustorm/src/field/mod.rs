@@ -1,16 +1,11 @@
 use std::marker::PhantomData;
 
-use crate::AggregateFunction;
-use crate::BinaryOperator;
 use crate::Column;
-use crate::Condition;
-use crate::Expression;
-use crate::OrderBy;
-use crate::OrderDirection;
-use crate::SelectItem;
 use crate::entity::Entity;
-use crate::query::expression::Subquery;
+use crate::query::condition::Condition;
+use crate::query::expression::{AggregateFunction, BinaryOperator, Expression, Subquery};
 use crate::query::join::JoinCondition;
+use crate::query::statement::{OrderBy, OrderDirection, SelectItem};
 use crate::value::BindValue;
 
 pub struct Field<E, T> {
