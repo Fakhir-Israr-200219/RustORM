@@ -1,4 +1,4 @@
-use crate::query::Query;
+use crate::query::{Condition, Query};
 
 pub trait RelationLoader<Related> {
     fn load_relation(&mut self, related: Vec<Related>);
@@ -31,58 +31,58 @@ pub trait Entity {
         Query::new()
     }
 
-    async fn create<D>(db: &sqlx::PgPool, data: D) -> Result<Self::Model, sqlx::Error>
+    async fn create<'c, D, A>(db: A, data: D) -> Result<Self::Model, sqlx::Error>
     where
         Self: Sized,
         D: crate::executor::InsertData<Self>,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
         for<'r> Self::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
     {
-        crate::executor::insert::<Self, D>(db, data).await
+        crate::executor::insert::<Self, D, A>(db, data).await
     }
-    async fn update<D>(db: &sqlx::PgPool, id: i32, data: D) -> Result<Self::Model, sqlx::Error>
+    async fn update<'c, D, A>(db: A, id: i32, data: D) -> Result<Self::Model, sqlx::Error>
     where
         Self: Sized,
         D: crate::executor::UpdateData<Self>,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
         for<'r> Self::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
     {
-        crate::executor::update::<Self, D>(db, id, data).await
+        crate::executor::update::<Self, D, A>(db, id, data).await
     }
-    async fn delete(db: &sqlx::PgPool, id: i32) -> Result<u64, sqlx::Error>
+    async fn delete<'c, A>(db: A, id: i32) -> Result<u64, sqlx::Error>
     where
         Self: Sized,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     {
-        crate::executor::delete::<Self>(db, id).await
+        crate::executor::delete::<Self, A>(db, id).await
     }
-    async fn create_many<D>(
-        db: &sqlx::PgPool,
-        data: Vec<D>,
-    ) -> Result<Vec<Self::Model>, sqlx::Error>
+    async fn create_many<'c, D, A>(db: A, data: Vec<D>) -> Result<Vec<Self::Model>, sqlx::Error>
     where
         Self: Sized,
         D: crate::executor::InsertData<Self>,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
         for<'r> Self::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
     {
-        crate::executor::insert_many::<Self, D>(db, data).await
+        crate::executor::insert_many::<Self, D, A>(db, data).await
     }
-    async fn update_many<D>(
-        db: &sqlx::PgPool,
-        condition: crate::query::condition::Condition<Self>,
+    async fn update_many<'c, D, A>(
+        db: A,
+        condition: Condition<Self>,
         data: D,
     ) -> Result<u64, sqlx::Error>
     where
         Self: Sized,
         D: crate::executor::UpdateData<Self>,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     {
-        crate::executor::update_many::<Self, D>(db, condition, data).await
+        crate::executor::update_many::<Self, D, A>(db, condition, data).await
     }
-    async fn delete_many(
-        db: &sqlx::PgPool,
-        condition: crate::query::condition::Condition<Self>,
-    ) -> Result<u64, sqlx::Error>
+    async fn delete_many<'c, A>(db: A, condition: Condition<Self>) -> Result<u64, sqlx::Error>
     where
         Self: Sized,
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     {
-        crate::executor::delete_many::<Self>(db, condition).await
+        crate::executor::delete_many::<Self, A>(db, condition).await
     }
 }
 

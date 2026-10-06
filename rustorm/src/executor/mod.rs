@@ -1,22 +1,21 @@
 use crate::{
-    entity::Entity,
-    query::condition::Condition,
-    sql::compile_expression,
-    value::BindValue,
+    entity::Entity, query::condition::Condition, sql::compile_expression, value::BindValue,
 };
-use sqlx::PgPool;
 
 pub trait InsertData<E: Entity> {
     fn columns(&self) -> &'static [&'static str];
     fn values(&self) -> Vec<BindValue>;
 }
 
-pub async fn insert<E, D>(db: &PgPool, data: D) -> Result<E::Model, sqlx::Error>
+pub async fn insert<'c, E, D, A>(db: A, data: D) -> Result<E::Model, sqlx::Error>
 where
     E: Entity,
     D: InsertData<E>,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
+    let mut conn = db.acquire().await?;
+
     let columns = data.columns();
     let values = data.values();
 
@@ -49,29 +48,23 @@ where
         }
     }
 
-    query.fetch_one(db).await
+    query.fetch_one(&mut *conn).await
 }
-pub async fn insert_many<E, D>(
-    db: &PgPool,
-    data: Vec<D>,
-) -> Result<Vec<E::Model>, sqlx::Error>
+pub async fn insert_many<'c, E, D, A>(db: A, data: Vec<D>) -> Result<Vec<E::Model>, sqlx::Error>
 where
     E: Entity,
     D: InsertData<E>,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
     if data.is_empty() {
         return Ok(Vec::new());
     }
-
+    let mut conn = db.acquire().await?;
     let columns = data[0].columns();
     let column_count = columns.len();
 
-    let mut sql = format!(
-        "INSERT INTO {} ({}) VALUES ",
-        E::TABLE,
-        columns.join(", ")
-    );
+    let mut sql = format!("INSERT INTO {} ({}) VALUES ", E::TABLE, columns.join(", "));
 
     let mut values = Vec::new();
 
@@ -122,7 +115,7 @@ where
         }
     }
 
-    query.fetch_all(db).await
+    query.fetch_all(&mut *conn).await
 }
 // ==================== UPDATE ====================
 
@@ -131,12 +124,14 @@ pub trait UpdateData<E: Entity> {
     fn values(&self) -> Vec<BindValue>;
 }
 
-pub async fn update<E, D>(db: &PgPool, id: i32, data: D) -> Result<E::Model, sqlx::Error>
+pub async fn update<'c, E, D, A>(db: A, id: i32, data: D) -> Result<E::Model, sqlx::Error>
 where
     E: Entity,
     D: UpdateData<E>,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
+    let mut conn = db.acquire().await?;
     let columns = data.columns();
     let values = data.values();
 
@@ -178,29 +173,35 @@ where
 
     query = query.bind(id);
 
-    query.fetch_one(db).await
+    query.fetch_one(&mut *conn).await
 }
 
-pub async fn delete<E>(db: &PgPool, id: i32) -> Result<u64, sqlx::Error>
+pub async fn delete<'c, E, A>(db: A, id: i32) -> Result<u64, sqlx::Error>
 where
     E: Entity,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
 {
+    let mut conn = db.acquire().await?;
+
     let sql = format!("DELETE FROM {} WHERE id = $1", E::TABLE);
 
-    let result = sqlx::query(&sql).bind(id).execute(db).await?;
+    let result = sqlx::query(&sql).bind(id).execute(&mut *conn).await?;
 
     Ok(result.rows_affected())
 }
 
-pub async fn update_many<E, D>(
-    db: &PgPool,
+pub async fn update_many<'c, E, D, A>(
+    db: A,
     condition: Condition<E>,
     data: D,
 ) -> Result<u64, sqlx::Error>
 where
     E: Entity,
     D: UpdateData<E>,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
 {
+    let mut conn = db.acquire().await?;
+
     let columns = data.columns();
     let values = data.values();
 
@@ -225,8 +226,7 @@ where
 
     let condition_expression = condition.into_ast();
 
-    let where_clause =
-        compile_expression(&condition_expression, &mut next_placeholder);
+    let where_clause = compile_expression(&condition_expression, &mut next_placeholder);
 
     let sql = format!(
         "UPDATE {} SET {} WHERE {}",
@@ -237,10 +237,7 @@ where
 
     let mut binds = values;
 
-    crate::sql::collect_bind_values(
-        &condition_expression,
-        &mut binds,
-    );
+    crate::sql::collect_bind_values(&condition_expression, &mut binds);
 
     let mut query = sqlx::query(&sql);
 
@@ -255,39 +252,27 @@ where
         }
     }
 
-    let result = query.execute(db).await?;
+    let result = query.execute(&mut *conn).await?;
 
     Ok(result.rows_affected())
 }
-pub async fn delete_many<E>(
-    db: &PgPool,
-    condition: Condition<E>,
-) -> Result<u64, sqlx::Error>
+pub async fn delete_many<'c, E, A>(db: A, condition: Condition<E>) -> Result<u64, sqlx::Error>
 where
     E: Entity,
+    A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
 {
+    let mut conn = db.acquire().await?;
     let condition_expression = condition.into_ast();
 
     let mut next_placeholder = 1;
 
-    let where_clause =
-        compile_expression(
-            &condition_expression,
-            &mut next_placeholder,
-        );
+    let where_clause = compile_expression(&condition_expression, &mut next_placeholder);
 
-    let sql = format!(
-        "DELETE FROM {} WHERE {}",
-        E::TABLE,
-        where_clause
-    );
+    let sql = format!("DELETE FROM {} WHERE {}", E::TABLE, where_clause);
 
     let mut binds = Vec::new();
 
-    crate::sql::collect_bind_values(
-        &condition_expression,
-        &mut binds,
-    );
+    crate::sql::collect_bind_values(&condition_expression, &mut binds);
 
     let mut query = sqlx::query(&sql);
 
@@ -302,7 +287,7 @@ where
         }
     }
 
-    let result = query.execute(db).await?;
+    let result = query.execute(&mut *conn).await?;
 
     Ok(result.rows_affected())
 }

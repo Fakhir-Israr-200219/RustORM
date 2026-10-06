@@ -4,7 +4,7 @@
 
 RustORM aims to bring the developer experience of Prisma/Drizzle to the Rust ecosystem: a schema file, a CLI, and type-safe generated entities, without requiring users to write ORM-specific derive macros.
 
-> ⚠️ **Status:** Early development. The runtime query builder and core CRUD operations are functional and tested. Schema-driven CLI, code generation, migrations, and end-to-end eager loading are still in development.
+> ⚠️ **Status:** Early development. The runtime query builder, relations, CRUD operations, bulk operations, and transaction support are functional and tested. The schema language, CLI, code generation, and migrations are still under development.
 
 ---
 
@@ -14,35 +14,37 @@ Rust has powerful database libraries and ORMs, but many approaches involve signi
 
 RustORM takes a schema-driven approach:
 
-**Define your schema once → generate your entities → write type-safe queries and CRUD operations.**
+> **Define your schema once → generate your entities → write type-safe queries and CRUD operations.**
 
-| ORM                | Developer Experience | Schema-Driven | Relations      |
-| ------------------ | -------------------- | ------------- | -------------- |
-| **Prisma** (TS)    | ⭐⭐⭐ Excellent        | ✅ Yes         | ✅ Automatic    |
-| **Drizzle** (TS)   | ⭐⭐⭐ Excellent        | ✅ Yes         | ✅ Easy         |
-| **TypeORM** (TS)   | ⭐⭐ Good              | ⚠️ Partial    | ⚠️ Manual      |
-| **SeaORM** (Rust)  | ⭐⭐ Verbose           | ❌ No          | ⚠️ Manual      |
-| **Diesel** (Rust)  | ⭐ Complex            | ❌ No          | ⚠️ Complex     |
-| **SQLx** (Rust)    | ⭐ Raw SQL            | ❌ No          | ❌ Manual       |
-| **RustORM** (Rust) | 🚧 In Progress       | 🚧 Planned    | 🚧 In Progress |
+| ORM | Developer Experience | Schema-Driven | Relations |
+| --- | --- | --- | --- |
+| **Prisma** (TS) | ⭐⭐⭐ Excellent | ✅ Yes | ✅ Automatic |
+| **Drizzle** (TS) | ⭐⭐⭐ Excellent | ✅ Yes | ✅ Easy |
+| **TypeORM** (TS) | ⭐⭐ Good | ⚠️ Partial | ⚠️ Manual |
+| **SeaORM** (Rust) | ⭐⭐ Good | ⚠️ Generated | ⚠️ Generated |
+| **Diesel** (Rust) | ⭐ Complex | ❌ No | ⚠️ Complex |
+| **SQLx** (Rust) | ⭐ Raw SQL | ❌ No | ❌ Manual |
+| **RustORM** (Rust) | 🚧 In Progress | 🚧 Planned | 🚧 In Progress |
 
-The goal is simple:
+The long-term goal is simple:
 
 > **If you're building an Axum API, you should be able to define your database schema once and work with generated, type-safe Rust instead of maintaining repetitive ORM boilerplate manually.**
 
 ---
 
-# The Vision
+# Vision
 
 ## 1. Define Your Schema
+
+The planned schema language will look roughly like:
 
 ```rust
 // .rustorm/schema.rustorm
 
 model User {
-    id    Int     @id @auto
+    id    Int    @id @auto
     name  String
-    email String  @unique
+    email String @unique
     posts Post[]
 }
 
@@ -50,17 +52,21 @@ model Post {
     id      Int    @id @auto
     title   String
     user_id Int
-    user    User   @relation(fields: [user_id], references: [id])
+    user    User @relation(fields: [user_id], references: [id])
 }
 ```
 
 ## 2. Generate Entities and Migrations
+
+The intended workflow:
 
 ```bash
 rustorm dev
 ```
 
 ## 3. Use Generated Entities
+
+The generated API is intended to look like:
 
 ```rust
 let users = User::find()
@@ -71,7 +77,7 @@ let users = User::find()
     .await?;
 ```
 
-The intended workflow is:
+The long-term workflow:
 
 ```text
 .rustorm/schema.rustorm
@@ -80,28 +86,36 @@ The intended workflow is:
           ↓
    Generated Entities
           ↓
-    Type-safe Queries
+ Type-safe Queries + CRUD
           ↓
-       Database
+      Database
 ```
 
 ---
 
 # Current State
 
-The **runtime query engine** is functional and heavily tested.
+The **runtime query engine is functional and heavily tested**.
 
 RustORM currently supports:
 
-* Type-safe query construction
-* Parameterized SQL
-* Conditions and logical expressions
-* Aggregates
-* Joins
-* Subqueries
-* Relation metadata
-* CRUD execution against PostgreSQL
-* Bulk CRUD operations
+- Type-safe query construction
+- Parameterized SQL
+- Conditions and logical expressions
+- Ordering
+- Pagination
+- DISTINCT
+- GROUP BY / HAVING
+- Aggregate expressions
+- SQL joins
+- Subqueries
+- Qualified columns
+- Relation metadata
+- Eager relation loading infrastructure
+- Single-row CRUD
+- Bulk CRUD
+- PostgreSQL execution
+- Transactions
 
 The runtime is designed to remain independent from the future schema parser and code-generation layer.
 
@@ -109,28 +123,55 @@ The runtime is designed to remain independent from the future schema parser and 
 
 # What Works Today
 
-## Query Builder
+## Entity System
 
-### Entity System
+The runtime currently provides:
 
-* ✅ Generic `Entity` trait
-* ✅ Associated `Model` type
-* ✅ Type-safe `Field<E, T>`
-* ✅ Entity-specific field definitions
-* ✅ Generic query construction
+- ✅ Generic `Entity` trait
+- ✅ Associated `Model` type
+- ✅ Type-safe `Field<E, T>`
+- ✅ Entity-specific field definitions
+- ✅ Generic query construction
+- ✅ Qualified columns
 
-### Conditions
+Example:
 
-* ✅ `eq`
-* ✅ `not_eq`
-* ✅ `gt`
-* ✅ `gte`
-* ✅ `lt`
-* ✅ `lte`
-* ✅ `.and()`
-* ✅ `.or()`
-* ✅ Parameterized condition values
-* ✅ Bind-value collection
+```rust
+pub struct User;
+
+pub struct UserModel {
+    pub id: i32,
+    pub name: String,
+}
+
+impl Entity for User {
+    type Model = UserModel;
+
+    const TABLE: &'static str = "users";
+
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("name"),
+    ];
+}
+```
+
+---
+
+# Conditions
+
+Supported operators:
+
+- ✅ `eq`
+- ✅ `not_eq`
+- ✅ `gt`
+- ✅ `gte`
+- ✅ `lt`
+- ✅ `lte`
+- ✅ `and`
+- ✅ `or`
+
+Values are collected separately from SQL generation and passed to SQLx as parameters.
 
 Example:
 
@@ -147,31 +188,37 @@ let users = User::find()
 
 ---
 
-## Query Features
+# Query Features
 
-* ✅ `WHERE`
-* ✅ `ORDER BY`
-* ✅ `LIMIT`
-* ✅ `OFFSET`
-* ✅ `DISTINCT`
-* ✅ `GROUP BY`
-* ✅ `HAVING`
-* ✅ Aggregate expressions
-* ✅ Subqueries
-* ✅ Parameterized SQL generation
-* ✅ Correct bind-value ordering
+RustORM currently supports:
+
+- ✅ `WHERE`
+- ✅ `ORDER BY`
+- ✅ `LIMIT`
+- ✅ `OFFSET`
+- ✅ `DISTINCT`
+- ✅ `GROUP BY`
+- ✅ `HAVING`
+- ✅ `IN`
+- ✅ Aggregate expressions
+- ✅ Subqueries
+- ✅ Subquery bind propagation
+- ✅ Qualified columns
+- ✅ Multiple joins
+- ✅ Parameterized SQL generation
+- ✅ Correct bind-value ordering
 
 ---
 
-## Aggregates
+# Aggregates
 
 Supported aggregate expressions include:
 
-* ✅ `COUNT`
-* ✅ `SUM`
-* ✅ `AVG`
-* ✅ `MIN`
-* ✅ `MAX`
+- ✅ `COUNT`
+- ✅ `SUM`
+- ✅ `AVG`
+- ✅ `MIN`
+- ✅ `MAX`
 
 Example:
 
@@ -185,17 +232,22 @@ let stats = User::find()
     .await?;
 ```
 
+Aggregate SQL generation and integration behavior are covered by tests.
+
 ---
 
 # Joins
 
-RustORM currently supports the major SQL join types:
+RustORM currently supports:
 
-* ✅ `INNER JOIN`
-* ✅ `LEFT JOIN`
-* ✅ `RIGHT JOIN`
-* ✅ `FULL JOIN`
-* ✅ `CROSS JOIN`
+- ✅ `INNER JOIN`
+- ✅ `LEFT JOIN`
+- ✅ `RIGHT JOIN`
+- ✅ `FULL JOIN`
+- ✅ `CROSS JOIN`
+- ✅ Multiple joins
+- ✅ Multiple joins of the same relation
+- ✅ Relation-based joins
 
 Example:
 
@@ -211,7 +263,7 @@ let rows = User::find()
 
 # Subqueries
 
-Subqueries are supported through the query builder.
+Subqueries are supported by the query builder.
 
 Example:
 
@@ -226,47 +278,57 @@ let users = User::find()
     .await?;
 ```
 
+The compiler also handles bind propagation and placeholder offsets for subqueries.
+
 ---
 
 # Relations
 
 Relation metadata is currently implemented for:
 
-* ✅ One-to-many
-* ✅ Many-to-one
-* ✅ One-to-one
-* ✅ Many-to-many
+- ✅ One-to-many
+- ✅ Many-to-one
+- ✅ One-to-one
+- ✅ Many-to-many
 
-Example conceptual relationships:
+Conceptually:
 
 ```text
 User
- ├── Posts       (one-to-many)
- ├── Profile     (one-to-one)
- └── Roles       (many-to-many)
+ ├── Posts       one-to-many
+ ├── Profile     one-to-one
+ └── Roles       many-to-many
 
 Post
- └── User        (many-to-one)
+ └── User        many-to-one
+```
+
+The relation system supports relation-specific query behavior and foreign-key filtering.
+
+### Eager Loading
+
+The runtime currently contains:
+
+- ✅ `.with(...)`
+- ✅ Foreign-key filtering
+- ✅ Parent-key collection
+- ✅ Relation loading through the query executor
+- ⬜ Nested `.with(...)`
+
+Example:
+
+```rust
+let users = User::find()
+    .with(User::posts)
+    .all(&db)
+    .await?;
 ```
 
 ---
 
-# Eager Loading Infrastructure
+# CRUD
 
-The runtime contains infrastructure for relation loading, including:
-
-* ✅ `with(...)`
-* ✅ Foreign-key filtering
-* ✅ Parent-key collection
-* 🚧 Complete end-to-end eager-loading API
-
-The underlying relation infrastructure is being developed independently from the query builder.
-
----
-
-# CRUD Operations
-
-Core CRUD execution is now functional against PostgreSQL.
+Core CRUD execution is functional against PostgreSQL.
 
 ## Create One
 
@@ -280,9 +342,10 @@ let user = User::create(
 .await?;
 ```
 
-* ✅ Single-row INSERT
-* ✅ `RETURNING`
-* ✅ Returns generated model
+- ✅ Single-row INSERT
+- ✅ Parameterized values
+- ✅ `RETURNING`
+- ✅ Returns generated model
 
 ---
 
@@ -303,11 +366,11 @@ let users = User::create_many(
 .await?;
 ```
 
-* ✅ Bulk INSERT
-* ✅ Parameterized values
-* ✅ `RETURNING`
-* ✅ Returns created models
-* 🚧 Empty-input edge-case coverage
+- ✅ Bulk INSERT
+- ✅ Parameterized values
+- ✅ `RETURNING`
+- ✅ Returns created models
+- ✅ Empty input handling
 
 ---
 
@@ -332,12 +395,12 @@ UserUpdate {
 }
 ```
 
-A field set to `None` is not included in the generated `SET` clause.
+Fields set to `None` are excluded from the generated `SET` clause.
 
-* ✅ Single-row UPDATE
-* ✅ Partial update data
-* ✅ `RETURNING`
-* ✅ PostgreSQL verification
+- ✅ Single-row UPDATE
+- ✅ Partial updates
+- ✅ `RETURNING`
+- ✅ PostgreSQL execution
 
 ---
 
@@ -354,9 +417,10 @@ let affected = User::update_many(
 .await?;
 ```
 
-* ✅ Conditional bulk UPDATE
-* ✅ Parameterized conditions
-* ✅ Returns affected-row count
+- ✅ Conditional bulk UPDATE
+- ✅ Parameterized conditions
+- ✅ Correct bind ordering
+- ✅ Returns affected-row count
 
 ---
 
@@ -370,9 +434,9 @@ let affected = User::delete(
 .await?;
 ```
 
-* ✅ Single-row DELETE
-* ✅ Parameterized ID
-* ✅ Returns affected-row count
+- ✅ Single-row DELETE
+- ✅ Parameterized ID
+- ✅ Returns affected-row count
 
 ---
 
@@ -386,15 +450,64 @@ let affected = User::delete_many(
 .await?;
 ```
 
-* ✅ Conditional bulk DELETE
-* ✅ Parameterized conditions
-* ✅ Returns affected-row count
+- ✅ Conditional bulk DELETE
+- ✅ Parameterized conditions
+- ✅ Correct bind ordering
+- ✅ Returns affected-row count
+
+---
+
+# Transactions
+
+RustORM's database APIs support both connection pools and SQLx PostgreSQL transactions through `Acquire<Postgres>`.
+
+For example:
+
+```rust
+let mut tx = db.begin().await?;
+
+let user = User::create(
+    &mut tx,
+    UserCreate {
+        name: "Transaction User".into(),
+    },
+)
+.await?;
+
+User::update(
+    &mut tx,
+    user.id,
+    UserUpdate {
+        name: Some("Updated".into()),
+    },
+)
+.await?;
+
+User::delete(
+    &mut tx,
+    user.id,
+)
+.await?;
+
+tx.commit().await?;
+```
+
+Transaction support covers:
+
+- ✅ Queries
+- ✅ Create
+- ✅ Update
+- ✅ Delete
+- ✅ Create many
+- ✅ Update many
+- ✅ Delete many
+- ✅ Relation loading
 
 ---
 
 # SQL Safety
 
-RustORM uses parameterized SQL for user-provided values.
+RustORM uses parameterized SQL for application values.
 
 For example:
 
@@ -410,114 +523,134 @@ WHERE name = 'some-user-input'
 
 Values are collected separately from SQL generation and bound through `sqlx`.
 
-This keeps application values out of generated SQL strings and avoids SQL injection caused by direct value interpolation.
+This prevents application values from being directly interpolated into generated SQL.
 
 ---
 
 # Testing
 
-RustORM currently has an extensive test suite covering the runtime query system.
+The runtime currently has an extensive test suite.
 
-Current tests cover:
+Tests cover:
 
-* Comparison operators
-* Logical `AND`
-* Logical `OR`
-* Ordering
-* `LIMIT`
-* `OFFSET`
-* `DISTINCT`
-* `GROUP BY`
-* `HAVING`
-* Aggregate expressions
-* Joins
-* Multiple joins
-* Subqueries
-* Complex subqueries
-* Relation metadata
-* Foreign-key filtering
-* Bind-value ordering
-* Query compilation
-* CRUD execution
-* Bulk CRUD operations
-* PostgreSQL CRUD verification
+- Comparison operators
+- Logical `AND`
+- Logical `OR`
+- Ordering
+- `LIMIT`
+- `OFFSET`
+- `DISTINCT`
+- `GROUP BY`
+- `HAVING`
+- Aggregate expressions
+- Joins
+- Multiple joins
+- Relation joins
+- Subqueries
+- Complex subqueries
+- Subquery bind propagation
+- Qualified columns
+- Relation metadata
+- Foreign-key filtering
+- Bind-value ordering
+- Query compilation
+- CRUD execution
+- Bulk CRUD operations
+- PostgreSQL CRUD execution
+- Transactional CRUD execution
+- Transactional relation loading
 
-Run the test suite with:
+Current verification:
 
-```bash
+```text
+cargo check
+    ✅
+
 cargo test
+    ✅ 104 passed
+    ❌ 0 failed
+
+cargo clippy --all-targets --all-features -- -D warnings
+    ✅
 ```
-
-The current test suite passes successfully.
-
-Actual PostgreSQL CRUD execution is also exercised through the project's runtime test runner.
 
 ---
 
 # Architecture
 
-RustORM is intended to be divided into three major layers:
+RustORM is intended to have three major layers:
 
 ```text
 your-app
     │
     ├──────────────► generated entities
-    │                     │
-    │                     ▼
+    │                       │
+    │                       ▼
     └──────────────► rustorm runtime
 ```
 
-| Layer         | Crate              | Responsibility                                                             |
-| ------------- | ------------------ | -------------------------------------------------------------------------- |
-| **Runtime**   | `rustorm`          | Query engine, entities, fields, SQL expressions, compilation and execution |
-| **Generated** | `rustorm-entities` | Generated models, fields and relation metadata                             |
-| **CLI**       | `rustorm-cli`      | Schema parsing, entity generation and migration management                 |
+| Layer | Crate | Responsibility |
+| --- | --- | --- |
+| **Runtime** | `rustorm` | Query engine, entities, fields, SQL expressions, compilation and execution |
+| **Generated** | `rustorm-entities` | Generated models, fields and relation metadata |
+| **CLI** | `rustorm-cli` | Schema parsing, entity generation and migration management |
 
-## Runtime
+The generated and CLI crates are part of the planned schema-driven architecture and are not yet complete.
 
-The runtime provides the generic database layer:
+---
 
-* `Entity`
-* `Query`
-* `Field`
-* Conditions
-* SQL expressions
-* SQL compilation
-* Bind values
-* Relation infrastructure
-* CRUD execution
+# Runtime
+
+The runtime provides:
+
+- `Entity`
+- `Query`
+- `Field`
+- Conditions
+- SQL expressions
+- SQL compilation
+- Bind values
+- Relation infrastructure
+- CRUD execution
+- Transaction-compatible execution
 
 The runtime does not need to know an application's complete schema.
 
-## Generated Entities
+---
 
-The future generated layer will contain:
+# Generated Entities
 
-* Model structs
-* Entity definitions
-* Field constants
-* Relation metadata
-* Create/update input types
+The planned generated layer will contain:
+
+- Model structs
+- Entity definitions
+- Field constants
+- Relation metadata
+- Create input types
+- Update input types
 
 Generated code is intended to remain readable and inspectable Rust.
 
-## CLI
+---
 
-The future CLI will manage the schema-driven workflow:
+# CLI
+
+The planned CLI will manage the schema-driven workflow:
 
 ```bash
 rustorm init
 rustorm dev
+rustorm generate
 rustorm migrate
 ```
 
+The CLI is not yet implemented.
+
 ---
 
-# Design Principles
+# Schema
 
-## 1. Schema Is the Source of Truth
-
-The database schema should eventually be described in one place.
+The schema system is planned as the source of truth for:
 
 ```text
 schema
@@ -529,7 +662,50 @@ queries
 migrations
 ```
 
-The goal is to avoid manually synchronizing models, fields and migrations across multiple files.
+Planned schema capabilities include:
+
+- Models
+- Scalar types
+- Relations
+- IDs
+- Defaults
+- Unique constraints
+- Indexes
+- Relation attributes
+
+The schema parser and validation system are not yet implemented.
+
+---
+
+# Migrations
+
+Migration support is planned but not yet implemented.
+
+Planned functionality:
+
+- Schema diffing
+- Migration generation
+- Migration execution
+- Migration tracking
+- Rollback support
+
+---
+
+# Design Principles
+
+## 1. Schema Is the Source of Truth
+
+The long-term goal is to describe the database schema once and derive the required Rust entities and migrations from it.
+
+```text
+schema
+   ↓
+generated Rust
+   ↓
+queries + CRUD
+   ↓
+database
+```
 
 ---
 
@@ -543,19 +719,19 @@ For example:
 User::name.eq("Fakhir")
 ```
 
-The field is represented as a typed Rust value and checked by the Rust compiler.
+uses a typed Rust field rather than an arbitrary string.
 
 ---
 
 ## 3. Parameterized SQL
 
-User-provided values are passed through SQL parameters:
+Application values are passed through SQL parameters:
 
 ```sql
 WHERE name = $1
 ```
 
-rather than being interpolated directly into SQL.
+rather than being directly interpolated into SQL.
 
 ---
 
@@ -569,36 +745,28 @@ Users should be able to inspect generated files and understand what RustORM prod
 
 ## 5. Works Without a Live Database
 
-The future schema-driven development workflow should not require a live database simply to generate entities.
-
-For example:
-
-```bash
-rustorm dev
-```
-
-should eventually be able to generate code from:
+The future schema-driven workflow should be able to generate entities from:
 
 ```text
 .rustorm/schema.rustorm
 ```
 
-even when the database is temporarily unreachable.
+without requiring a live database simply to generate Rust code.
 
 ---
 
 ## 6. Escape Hatches Matter
 
-ORMs should not prevent developers from using SQL when necessary.
+RustORM is not intended to eliminate SQL.
 
 Raw SQL should remain available for queries that are:
 
-* Too specialized
-* Database-specific
-* Difficult to express through the ORM
-* Performance-sensitive
+- Too specialized
+- Database-specific
+- Difficult to express through the ORM
+- Performance-sensitive
 
-RustORM is intended to make common operations easier, not eliminate SQL.
+The goal is to make common operations easier while keeping SQL accessible.
 
 ---
 
@@ -607,153 +775,221 @@ RustORM is intended to make common operations easier, not eliminate SQL.
 RustORM is being developed incrementally:
 
 ```text
-Read Queries
-     ↓
-Writes
+Query Engine
      ↓
 Relations
      ↓
+CRUD
+     ↓
+Transactions
+     ↓
+Schema
+     ↓
+Code Generation
+     ↓
 Migrations
      ↓
-Eager Loading
-     ↓
-Integrations
+CLI
 ```
-
-The project avoids trying to build the entire ORM in one large rewrite.
-
----
-
-# Example
-
-A future RustORM application should look roughly like this:
-
-```rust
-let user = User::create(
-    &db,
-    UserCreate {
-        name: "Fakhir".into(),
-    },
-)
-.await?;
-
-let users = User::find()
-    .where_(User::name.eq("Fakhir"))
-    .order_by(User::id.desc())
-    .take(20)
-    .all(&db)
-    .await?;
-
-User::update_many(
-    &db,
-    User::name.eq("Old Name"),
-    UserUpdate {
-        name: Some("New Name".into()),
-    },
-)
-.await?;
-
-User::delete(
-    &db,
-    user.id,
-)
-.await?;
-```
-
-The intended final developer experience is:
-
-```text
-Schema
-  ↓
-Generated Rust
-  ↓
-Type-safe Queries + CRUD
-  ↓
-Parameterized SQL
-  ↓
-Database
-```
-
----
-
-# What's In Progress
-
-The next major areas of development are:
-
-### Schema & CLI
-
-* 🚧 `.rustorm/schema.rustorm` parser
-* 🚧 `rustorm init`
-* 🚧 `rustorm dev`
-* 🚧 `rustorm migrate`
-
-### Code Generation
-
-* 🚧 Entity generation
-* 🚧 Model generation
-* 🚧 Field generation
-* 🚧 Relation generation
-* 🚧 Create/update input generation
-
-### Migrations
-
-* 🚧 Schema diffing
-* 🚧 Migration generation
-* 🚧 Migration execution
-* 🚧 Migration tracking table
-
-### Query & CRUD Hardening
-
-* 🚧 CRUD edge-case coverage
-* 🚧 Empty-operation behavior
-* 🚧 Nonexistent-record behavior
-* 🚧 Additional condition integration tests
-* 🚧 Transaction support
-
-### Relations
-
-* 🚧 Complete eager-loading API
-* 🚧 Relation query improvements
-
-### Integrations
-
-* 🚧 Axum examples
-* 🚧 Documentation
-* 📋 Actix Web integration
-* 📋 Additional database support
 
 ---
 
 # Roadmap
 
-| Phase       | Status         | Deliverable                                                                |
-| ----------- | -------------- | -------------------------------------------------------------------------- |
-| **Phase 0** | ✅ Complete     | Core traits, fields, query infrastructure and SQL compiler                 |
-| **Phase 1** | ✅ Complete     | Read queries, filters, joins, aggregates, subqueries and relation metadata |
-| **Phase 2** | 🚧 In Progress | CRUD execution and runtime hardening                                       |
-| **Phase 3** | 🚧 In Progress | CLI, schema parser and entity generation                                   |
-| **Phase 4** | 🚧 Planned     | Migration generation, diffing and tracking                                 |
-| **Phase 5** | 🚧 Planned     | End-to-end eager loading                                                   |
-| **Phase 6** | 📋 Planned     | Axum integration and documentation                                         |
-| **Phase 7** | 📋 Planned     | Transactions, connection pooling and broader error-handling improvements   |
+## Query Engine
+
+```text
+WHERE                  ✅
+Operators              ✅
+AND / OR               ✅
+ORDER BY               ✅
+LIMIT / OFFSET         ✅
+DISTINCT               ✅
+GROUP BY               ✅
+HAVING                 ✅
+Aggregates             ✅
+JOINs                  ✅
+CROSS JOIN             ✅
+Multiple JOINs         ✅
+IN                     ✅
+Basic Subquery         ✅
+Subquery binds         ✅
+Qualified columns      ✅
+COUNT execution        ⬜
+```
+
+## Relations
+
+```text
+One-to-Many             ✅
+Many-to-One             ✅
+One-to-One              ✅
+Many-to-Many            ✅
+.with()                 ✅
+Eager loading           ✅
+Nested .with()          ⬜
+```
+
+## CRUD
+
+```text
+INSERT                  ✅
+UPDATE                  ✅
+DELETE                  ✅
+INSERT MANY             ✅
+UPDATE MANY             ✅
+DELETE MANY             ✅
+```
+
+## Runtime
+
+```text
+Executor                ✅
+PostgreSQL              ✅
+Pool                    ✅
+Transactions            ✅
+ORM-level errors        ⬜
+```
+
+## Advanced SQL
+
+```text
+CTE                     ⬜
+UNION                   ⬜
+FOR UPDATE              ⬜
+```
+
+## Schema
+
+```text
+schema.rustorm          ⬜
+Parser                  ⬜
+Representation          ⬜
+Validation              ⬜
+```
+
+## Migrations
+
+```text
+Generate                ⬜
+Run                     ⬜
+Rollback                ⬜
+Migration tracking      ⬜
+Schema diffing          ⬜
+```
+
+## Generator
+
+```text
+Entities                ⬜
+Models                  ⬜
+Fields                  ⬜
+Relations               ⬜
+Create inputs           ⬜
+Update inputs           ⬜
+Client API              ⬜
+```
+
+## CLI
+
+```text
+init                    ⬜
+dev                     ⬜
+generate                ⬜
+migration               ⬜
+```
+
+## Quality
+
+```text
+Test extraction         ⬜
+Visibility cleanup      🚧
+Clippy                  ✅
+Documentation           ⬜
+Multi-DB architecture   ⬜
+```
+
+---
+
+# Current Project Structure
+
+```text
+src/
+├── entity/
+│   └── mod.rs
+├── executor/
+│   └── mod.rs
+├── field/
+│   └── mod.rs
+├── query/
+│   ├── builder.rs
+│   ├── condition.rs
+│   ├── expression.rs
+│   ├── join.rs
+│   ├── mod.rs
+│   ├── relation.rs
+│   └── statement.rs
+├── sql/
+│   ├── mod.rs
+│   └── postgres.rs
+├── tests/
+│   ├── mod.rs
+│   └── models.rs
+├── value/
+│   └── mod.rs
+├── lib.rs
+└── main.rs
+```
+
+The runtime responsibilities are separated into:
+
+```text
+Entity
+   │
+   ├── Field
+   │
+   ├── Query
+   │      ├── Conditions
+   │      ├── Expressions
+   │      ├── Joins
+   │      └── Relations
+   │
+   ├── SQL Compiler
+   │
+   ├── Bind Values
+   │
+   └── Executor
+          ├── Create
+          ├── Update
+          ├── Delete
+          └── Transactions
+```
 
 ---
 
 # Getting Started
 
-> ⚠️ The schema-driven CLI is still under development. At the moment, entities can be defined manually to experiment with the runtime.
+> ⚠️ The schema-driven CLI is not available yet. The current runtime requires manually defined entities.
 
 ## PostgreSQL
 
 RustORM currently targets PostgreSQL through `sqlx`.
 
-Example dependency setup:
+Example dependencies:
 
 ```toml
 [dependencies]
 rustorm = "0.1"
-sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-native-tls"] }
-tokio = { version = "1", features = ["full"] }
+sqlx = { version = "0.8", features = [
+    "runtime-tokio",
+    "postgres",
+    "macros",
+    "bigdecimal"
+] }
+tokio = { version = "1", features = [
+    "macros",
+    "rt-multi-thread"
+] }
 ```
 
 ## Define an Entity
@@ -805,42 +1041,111 @@ let users = User::find()
 
 ---
 
-# Project Structure
+# Example
 
-The current runtime is organized around the following components:
+A current RustORM application can use:
 
-```text
-src/
-├── entity/
-├── executor/
-├── field/
-├── query/
-├── sql/
-├── tests/
-└── value/
+```rust
+let user = User::create(
+    &db,
+    UserCreate {
+        name: "Fakhir".into(),
+    },
+)
+.await?;
+
+let users = User::find()
+    .where_(User::name.eq("Fakhir"))
+    .order_by(User::id.desc())
+    .take(20)
+    .all(&db)
+    .await?;
+
+User::update_many(
+    &db,
+    User::name.eq("Old Name"),
+    UserUpdate {
+        name: Some("New Name".into()),
+    },
+)
+.await?;
+
+User::delete(
+    &db,
+    user.id,
+)
+.await?;
 ```
 
-The main runtime responsibilities are separated into:
+The intended final developer experience is:
 
 ```text
-Entity
-   │
-   ├── Field
-   │
-   ├── Query
-   │      ├── Conditions
-   │      ├── Expressions
-   │      ├── Joins
-   │      └── Relations
-   │
-   ├── SQL Compiler
-   │
-   ├── Bind Values
-   │
-   └── Executor
-          ├── Create
-          ├── Update
-          └── Delete
+Schema
+  ↓
+Generated Rust
+  ↓
+Type-safe Queries + CRUD
+  ↓
+Parameterized SQL
+  ↓
+Database
+```
+
+---
+
+# What's Next?
+
+The next major milestone is the **schema-driven developer workflow**.
+
+### Schema
+
+```text
+.rustorm/schema.rustorm
+        ↓
+     Parser
+        ↓
+   Schema AST
+        ↓
+   Validation
+```
+
+### Code Generation
+
+```text
+Validated Schema
+       ↓
+ Entity Generator
+       ↓
+ Model Generator
+       ↓
+ Field Generator
+       ↓
+ Relation Generator
+       ↓
+ Create / Update Inputs
+```
+
+### CLI
+
+```text
+rustorm init
+rustorm dev
+rustorm generate
+rustorm migrate
+```
+
+The goal is to move from manually maintained entities toward:
+
+```text
+.rustorm/schema.rustorm
+          ↓
+       rustorm
+          ↓
+   Generated Rust
+          ↓
+ Type-safe Queries
+          ↓
+       Database
 ```
 
 ---
@@ -851,9 +1156,9 @@ RustORM is an early-stage project, and feedback is welcome.
 
 Areas where contributions and discussion are especially useful:
 
-## Schema Language
+### Schema Language
 
-Help design the `.rustorm` schema syntax.
+Help design the `.rustorm` schema syntax:
 
 ```rust
 model User {
@@ -865,34 +1170,31 @@ model User {
 
 Ideas around:
 
-* Types
-* Attributes
-* Relations
-* Constraints
-* Defaults
-* Indexes
+- Types
+- Attributes
+- Relations
+- Constraints
+- Defaults
+- Indexes
 
-are especially useful.
-
-## CLI Ergonomics
+### CLI Ergonomics
 
 Feedback is welcome around commands such as:
 
 ```bash
 rustorm init
 rustorm dev
+rustorm generate
 rustorm migrate
 ```
 
-## Framework Integrations
+### Framework Integrations
 
 Examples and real-world use cases for:
 
-* Axum
-* Actix Web
-* Other Rust web frameworks
-
-are welcome.
+- Axum
+- Actix Web
+- Other Rust web frameworks
 
 ---
 
@@ -902,11 +1204,11 @@ RustORM is not trying to hide the database from Rust developers.
 
 The goal is to remove repetitive ORM work while keeping:
 
-* Rust's type safety
-* SQL visibility
-* Generated-code transparency
-* Escape hatches
-* Predictable developer experience
+- Rust's type safety
+- SQL visibility
+- Generated-code transparency
+- Escape hatches
+- Predictable developer experience
 
 The long-term vision is:
 
@@ -936,20 +1238,28 @@ License: **TBD**
 
 RustORM is inspired by:
 
-* [Prisma](https://www.prisma.io/)
-* [Drizzle](https://orm.drizzle.team/)
-* Entity Framework
-* Rust's database and ORM ecosystem
+- [Prisma](https://www.prisma.io/)
+- [Drizzle](https://orm.drizzle.team/)
+- Entity Framework
+- Rust's database and ORM ecosystem
 
-The project is also inspired by the frustration of writing macros and repetitive boilerplate for concepts as ordinary as fields, entities and foreign-key relationships.
+The project is also inspired by the frustration of writing macros and repetitive boilerplate for concepts as ordinary as fields, entities, and foreign-key relationships.
 
 ---
 
-## Status
+# Status
 
 RustORM is currently in **early development**.
 
-The runtime query builder and core CRUD execution are functional and tested.
+The runtime query builder, relations, CRUD operations, bulk operations, and transaction support are functional and tested.
+
+Current verification:
+
+```text
+104 tests passed
+0 tests failed
+Clippy: clean
+```
 
 The next major milestone is the schema-driven developer workflow:
 
@@ -965,4 +1275,4 @@ The next major milestone is the schema-driven developer workflow:
        Database
 ```
 
-**The goal: Prisma-like ergonomics for Rust, while keeping Rust and SQL visible underneath.**
+> **The goal: Prisma-like ergonomics for Rust, while keeping Rust and SQL visible underneath.**

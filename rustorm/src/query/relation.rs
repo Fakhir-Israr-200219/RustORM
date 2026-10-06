@@ -22,7 +22,7 @@ where
 {
     async fn load(
         &self,
-        db: &sqlx::PgPool,
+        db: &mut sqlx::PgConnection,
         parents: &mut [E::Model],
     ) -> Result<(), sqlx::Error>;
 }
@@ -33,7 +33,7 @@ where
 {
     async fn load(
         &self,
-        _db: &sqlx::PgPool,
+        _db: &mut sqlx::PgConnection,
         _parents: &mut [E::Model],
     ) -> Result<(), sqlx::Error> {
         Ok(())
@@ -50,7 +50,7 @@ where
 {
     async fn load(
         &self,
-        db: &sqlx::PgPool,
+        db: &mut sqlx::PgConnection,
         parents: &mut [From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
@@ -64,7 +64,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(db).await?;
+        let children = child_query.all(&mut *db).await?;
 
         let mut grouped: HashMap<i64, Vec<To::Model>> = HashMap::new();
 
@@ -96,7 +96,7 @@ where
 {
     async fn load(
         &self,
-        db: &sqlx::PgPool,
+        db: &mut sqlx::PgConnection,
         parents: &mut [From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
@@ -110,7 +110,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(db).await?;
+        let children = child_query.all(&mut *db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 
@@ -142,7 +142,7 @@ where
 {
     async fn load(
         &self,
-        db: &sqlx::PgPool,
+       db: &mut sqlx::PgConnection,
         parents: &mut [From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
@@ -156,7 +156,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(db).await?;
+        let children = child_query.all(&mut *db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 
@@ -188,7 +188,7 @@ where
 {
     async fn load(
         &self,
-        db: &sqlx::PgPool,
+        db: &mut sqlx::PgConnection,
         parents: &mut [From::Model],
     ) -> Result<(), sqlx::Error> {
         if parents.is_empty() {
@@ -236,7 +236,7 @@ where
             query = query.bind(*key);
         }
 
-        let rows = query.fetch_all(db).await?;
+        let rows = query.fetch_all(&mut *db).await?;
 
         let mut parent_to_children: HashMap<i64, Vec<i64>> = HashMap::new();
         let mut target_ids = HashSet::new();
@@ -268,7 +268,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(db).await?;
+        let children = child_query.all(&mut *db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 

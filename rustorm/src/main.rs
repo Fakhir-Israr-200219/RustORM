@@ -1,20 +1,9 @@
 use std::sync::Arc;
 
 use rustorm::{
-    entity::{
-        Column,
-        Entity,
-        RelationKey,
-        RelationLoader,
-        SingleRelationLoader,
-    },
+    entity::{Column, Entity, RelationKey, RelationLoader, SingleRelationLoader},
     field::Field,
-    query::relation::{
-        ManyToMany,
-        ManyToOne,
-        OneToOne,
-        Relation,
-    },
+    query::relation::{ManyToMany, ManyToOne, OneToOne, Relation},
 };
 
 use sqlx::PgPool;
@@ -386,6 +375,24 @@ impl RelationKey for CommentModel {
 #[tokio::main]
 async fn main() -> Result<(), sqlx::Error> {
     let db = PgPool::connect("postgres://postgres:admin@localhost/rustorm").await?;
+
+    // ============================================================
+    // TRANSACTION QUERY + RELATION TEST
+    // ============================================================
+
+    let mut tx = db.begin().await?;
+
+    let users_with_posts_in_tx = User::find().with(User::posts).all(&mut tx).await?;
+
+    println!("\n=== USERS WITH POSTS — TRANSACTION ===");
+
+    for user in &users_with_posts_in_tx {
+        println!("User: {} ({})", user.name, user.id);
+
+        for post in &user.posts {
+            println!("  Post: {} ({})", post.title, post.id);
+        }
+    }
 
     // ------------------------------------------------------------
     // ONE-TO-MANY

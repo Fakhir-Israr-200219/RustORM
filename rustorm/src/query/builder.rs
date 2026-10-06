@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::entity::{Column, Entity};
 use crate::query::condition::Condition;
-use crate::query::expression::{Expression,BinaryOperator};
+use crate::query::expression::{BinaryOperator, Expression};
 use crate::query::join::{Join, JoinTarget, JoinType};
 use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStatement};
 use crate::sql::{collect_bind_values, compile_expression};
@@ -413,7 +413,12 @@ where
     R: crate::query::relation::RelationLoad<E>,
     for<'r> E::Model: sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
 {
-    pub async fn all(self, db: &sqlx::PgPool) -> Result<Vec<E::Model>, sqlx::Error> {
+    pub async fn all<'c, A>(self, db: A) -> Result<Vec<E::Model>, sqlx::Error>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut conn = db.acquire().await?;
+
         let compiled = self.compile();
 
         let mut query = sqlx::query_as::<_, E::Model>(&compiled.sql);
@@ -429,9 +434,9 @@ where
             }
         }
 
-        let mut parents = query.fetch_all(db).await?;
+        let mut parents = query.fetch_all(&mut *conn).await?;
 
-        self.relations.load(db, &mut parents).await?;
+        self.relations.load(&mut conn, &mut parents).await?;
 
         Ok(parents)
     }

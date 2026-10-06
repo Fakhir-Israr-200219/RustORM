@@ -1461,3 +1461,180 @@ fn qualified_column_select_works() {
         "SELECT id FROM users"
     );
 }
+#[tokio::test]
+async fn query_all_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let users = TestUser::find()
+        .all(&mut tx)
+        .await
+        .unwrap();
+
+    let _ = users;
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn create_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::create(
+        &mut tx,
+        TestUserCreate {
+            name: "Transaction User".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(user.name, "Transaction User");
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn update_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::update(
+        &mut tx,
+        1,
+        TestUserUpdate {
+            name: Some("Transaction Updated".to_string()),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(user.name, "Transaction Updated");
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn delete_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::create(
+        &mut tx,
+        TestUserCreate {
+            name: "Transaction Delete User".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::delete(&mut tx, user.id).await.unwrap();
+
+    assert_eq!(affected, 1);
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn update_many_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::create(
+        &mut tx,
+        TestUserCreate {
+            name: "Transaction Update Many User".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::update_many(
+        &mut tx,
+        TestUser::id.eq(user.id),
+        TestUserUpdate {
+            name: Some("Transaction Update Many Updated".to_string()),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(affected, 1);
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn delete_many_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::create(
+        &mut tx,
+        TestUserCreate {
+            name: "Transaction Delete Many User".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::delete_many(
+        &mut tx,
+        TestUser::id.eq(user.id),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(affected, 1);
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn create_many_works_with_transaction() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let users = TestUser::create_many(
+        &mut tx,
+        vec![
+            TestUserCreate {
+                name: "Transaction Create Many 1".to_string(),
+            },
+            TestUserCreate {
+                name: "Transaction Create Many 2".to_string(),
+            },
+            TestUserCreate {
+                name: "Transaction Create Many 3".to_string(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(users.len(), 3);
+    assert_eq!(users[0].name, "Transaction Create Many 1");
+    assert_eq!(users[1].name, "Transaction Create Many 2");
+    assert_eq!(users[2].name, "Transaction Create Many 3");
+
+    tx.rollback().await.unwrap();
+}
+
+
+
