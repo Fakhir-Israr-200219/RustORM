@@ -127,12 +127,15 @@ impl<E, T> Field<E, T> {
         E: Entity,
         E2: Entity,
     {
+        let compiled = subquery.compile();
+
         Condition {
             expression: Expression::Binary {
                 left: Box::new(Expression::Column(self.column)),
                 operator: BinaryOperator::In,
                 right: Box::new(Expression::Subquery(Subquery {
-                    sql: subquery.build_sql(),
+                    sql: compiled.sql,
+                    binds: compiled.binds,
                 })),
             },
             _entity: PhantomData,

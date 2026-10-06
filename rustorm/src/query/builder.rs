@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use crate::entity::{Column, Entity};
 use crate::query::condition::Condition;
-use crate::query::expression::Expression;
+use crate::query::expression::{Expression,BinaryOperator};
 use crate::query::join::{Join, JoinTarget, JoinType};
 use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStatement};
 use crate::sql::{collect_bind_values, compile_expression};
@@ -58,7 +58,17 @@ where
     E: Entity,
 {
     pub fn where_(mut self, condition: Condition<E>) -> Self {
-        self.statement.where_clause = Some(condition.into_ast());
+        let condition = condition.into_ast();
+
+        self.statement.where_clause = match self.statement.where_clause.take() {
+            Some(existing) => Some(Expression::Binary {
+                left: Box::new(existing),
+                operator: BinaryOperator::And,
+                right: Box::new(condition),
+            }),
+            None => Some(condition),
+        };
+
         self
     }
 

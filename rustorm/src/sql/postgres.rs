@@ -3,6 +3,37 @@ use crate::{
     value::BindValue,
 };
 
+fn offset_placeholders(sql: &str, offset: usize) -> String {
+    let mut result = String::with_capacity(sql.len());
+
+    let mut chars = sql.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '$' {
+            let mut number = String::new();
+
+            while let Some(next) = chars.peek() {
+                if next.is_ascii_digit() {
+                    number.push(*next);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            if !number.is_empty() {
+                let placeholder: usize = number.parse().unwrap();
+                result.push_str(&format!("${}", placeholder + offset));
+                continue;
+            }
+        }
+
+        result.push(ch);
+    }
+
+    result
+}
+
 pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut usize) -> String {
     match expression {
         Expression::Column(column) => match column.table() {
@@ -75,7 +106,12 @@ pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut
             }
         }
         Expression::Subquery(subquery) => {
-            format!("({})", subquery.sql)
+            let offset = *next_placeholder - 1;
+            let sql = offset_placeholders(&subquery.sql, offset);
+
+            *next_placeholder += subquery.binds.len();
+
+            format!("({})", sql)
         }
     }
 }
@@ -105,6 +141,8 @@ pub(crate) fn collect_bind_values(expression: &Expression, values: &mut Vec<Bind
                 collect_bind_values(expression, values);
             }
         }
-        Expression::Subquery(_) => {}
+        Expression::Subquery(subquery) => {
+            values.extend(subquery.binds.iter().cloned());
+        }
     }
 }

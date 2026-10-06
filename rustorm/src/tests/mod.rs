@@ -1380,3 +1380,72 @@ fn user_update_many_with_and_condition_works() {
         "UPDATE users SET name = $1 WHERE name = $2 AND name = $3"
     );
 }
+#[test]
+fn where_in_subquery_collects_bind_values() {
+    let subquery = TestUser::find()
+        .where_(TestUser::name.eq("Fakhir"))
+        .select(TestUser::id.select());
+
+    let query = TestUser::find()
+        .where_(TestUser::id.in_subquery(subquery));
+
+    let compiled = query.compile();
+
+    assert_eq!(
+        compiled.sql,
+        "SELECT id, name FROM users \
+         WHERE id IN (SELECT id FROM users WHERE name = $1)"
+    );
+
+    assert_eq!(
+        compiled.binds.len(),
+        1
+    );
+}
+
+#[test]
+fn where_in_subquery_offsets_placeholders() {
+    let subquery = TestUser::find()
+        .where_(TestUser::name.eq("Subquery"))
+        .select(TestUser::id.select());
+
+    let query = TestUser::find()
+        .where_(TestUser::name.eq("Outer"))
+        .where_(TestUser::id.in_subquery(subquery));
+
+    let compiled = query.compile();
+
+    assert_eq!(
+        compiled.sql,
+        "SELECT id, name FROM users \
+         WHERE name = $1 AND id IN (SELECT id FROM users WHERE name = $2)"
+    );
+
+    assert_eq!(compiled.binds.len(), 2);
+
+    match &compiled.binds[0] {
+        BindValue::String(value) => assert_eq!(value, "Outer"),
+        _ => panic!("expected outer string bind"),
+    }
+
+    match &compiled.binds[1] {
+        BindValue::String(value) => assert_eq!(value, "Subquery"),
+        _ => panic!("expected subquery string bind"),
+    }
+}
+#[test]
+fn multiple_where_conditions_work() {
+    let query = TestUser::find()
+        .where_(TestUser::name.eq("Outer"))
+        .where_(TestUser::id.eq(1));
+
+    let compiled = query.compile();
+
+    assert_eq!(
+        compiled.sql,
+        "SELECT id, name FROM users \
+         WHERE name = $1 AND id = $2"
+    );
+
+    assert_eq!(compiled.binds.len(), 2);
+}

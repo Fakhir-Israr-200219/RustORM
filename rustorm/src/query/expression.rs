@@ -22,6 +22,7 @@ pub(crate) enum AggregateFunction {
 }
 pub(crate) struct Subquery {
     pub(crate) sql: String,
+    pub(crate) binds: Vec<BindValue>,
 }
 
 pub(crate) enum Expression {
