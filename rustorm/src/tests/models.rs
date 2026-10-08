@@ -10,8 +10,30 @@ pub struct TestUser;
 pub struct TestUserCreate {
     pub name: String,
 }
+pub struct TestUserCreateWithNull;
+
+impl InsertData<TestUser> for TestUserCreateWithNull {
+    fn columns(&self) -> &'static [&'static str] {
+        &["name"]
+    }
+
+    fn values(&self) -> Vec<BindValue> {
+        vec![BindValue::Null]
+    }
+}
 pub struct TestUserUpdate {
     pub name: Option<String>,
+}
+pub struct TestUserUpdateWithNull;
+
+impl UpdateData<TestUser> for TestUserUpdateWithNull {
+    fn columns(&self) -> Vec<&'static str> {
+        vec!["name"]
+    }
+
+    fn values(&self) -> Vec<BindValue> {
+        vec![BindValue::Null]
+    }
 }
 
 impl UpdateData<TestUser> for TestUserUpdate {
@@ -44,13 +66,12 @@ impl InsertData<TestUser> for TestUserCreate {
         vec![BindValue::String(self.name.clone())]
     }
 }
-
 #[derive(Debug, sqlx::FromRow)]
 pub struct TestUserModel {
     pub id: i32,
 
     #[allow(dead_code)]
-    pub name: String,
+    pub name: Option<String>,
 
     #[sqlx(skip)]
     pub posts: Vec<TestPostModel>,

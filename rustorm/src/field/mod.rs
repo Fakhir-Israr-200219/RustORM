@@ -61,6 +61,19 @@ impl<E, T> Field<E, T> {
     pub const fn column(&self) -> Column {
         self.column
     }
+    pub fn is_null(&self) -> Condition<E> {
+        Condition {
+            expression: Expression::IsNull(Box::new(Expression::Column(self.column))),
+            _entity: PhantomData,
+        }
+    }
+
+    pub fn is_not_null(&self) -> Condition<E> {
+        Condition {
+            expression: Expression::IsNotNull(Box::new(Expression::Column(self.column))),
+            _entity: PhantomData,
+        }
+    }
 
     pub fn eq_column<E2>(&self, other: Field<E2, T>) -> JoinCondition
     where

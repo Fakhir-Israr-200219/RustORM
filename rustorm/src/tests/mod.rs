@@ -949,7 +949,7 @@ fn relation_parent_key_values_work() {
     let parents = vec![
         TestUserModel {
             id: 1,
-            name: "Fakhir".to_string(),
+            name: Some("Fakhir".to_string()),
             posts: vec![],
             profile: None,
             roles: vec![
@@ -965,7 +965,7 @@ fn relation_parent_key_values_work() {
         },
         TestUserModel {
             id: 2,
-            name: "Ali".to_string(),
+            name: Some("Ali".to_string()),
             posts: vec![],
             profile: None,
             roles: vec![Arc::new(TestRoleModel {
@@ -975,7 +975,7 @@ fn relation_parent_key_values_work() {
         },
         TestUserModel {
             id: 5,
-            name: "Ahmed".to_string(),
+            name: Some("Ahmed".to_string()),
             posts: vec![],
             profile: None,
             roles: vec![], // No roles
@@ -1082,7 +1082,18 @@ async fn user_create_works() {
     .unwrap();
 
     assert!(user.id > 0);
-    assert_eq!(user.name, "CRUD Test");
+    assert_eq!(user.name.as_deref(), Some("CRUD Test"));
+}
+#[tokio::test]
+async fn user_create_with_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let user = TestUser::create(&db, TestUserCreateWithNull).await.unwrap();
+
+    assert!(user.id > 0);
+    assert_eq!(user.name, None);
 }
 #[tokio::test]
 async fn user_update_works() {
@@ -1110,7 +1121,36 @@ async fn user_update_works() {
     .unwrap();
 
     assert_eq!(updated.id, user.id);
-    assert_eq!(updated.name, "After Update");
+    assert_eq!(updated.name.as_deref(), Some("After Update"));
+}
+
+#[tokio::test]
+async fn user_update_with_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let user = TestUser::create(
+        &db,
+        TestUserCreate {
+            name: "Before Null Update".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(user.name.as_deref(), Some("Before Null Update"));
+
+    let updated = TestUser::update(
+        &db,
+        user.id,
+        TestUserUpdateWithNull,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(updated.id, user.id);
+    assert_eq!(updated.name, None);
 }
 #[tokio::test]
 async fn user_delete_works() {
@@ -1169,9 +1209,9 @@ async fn user_create_many_works() {
     assert!(users[1].id > 0);
     assert!(users[2].id > 0);
 
-    assert_eq!(users[0].name, "Create Many 1");
-    assert_eq!(users[1].name, "Create Many 2");
-    assert_eq!(users[2].name, "Create Many 3");
+    assert_eq!(users[0].name.as_deref(), Some("Create Many 1"));
+    assert_eq!(users[1].name.as_deref(), Some("Create Many 2"));
+    assert_eq!(users[2].name.as_deref(), Some("Create Many 3"));
 }
 #[test]
 fn user_update_many_sql_works() {
@@ -1386,8 +1426,7 @@ fn where_in_subquery_collects_bind_values() {
         .where_(TestUser::name.eq("Fakhir"))
         .select(TestUser::id.select());
 
-    let query = TestUser::find()
-        .where_(TestUser::id.in_subquery(subquery));
+    let query = TestUser::find().where_(TestUser::id.in_subquery(subquery));
 
     let compiled = query.compile();
 
@@ -1397,10 +1436,7 @@ fn where_in_subquery_collects_bind_values() {
          WHERE id IN (SELECT id FROM users WHERE name = $1)"
     );
 
-    assert_eq!(
-        compiled.binds.len(),
-        1
-    );
+    assert_eq!(compiled.binds.len(), 1);
 }
 
 #[test]
@@ -1451,15 +1487,11 @@ fn multiple_where_conditions_work() {
 }
 #[test]
 fn qualified_column_select_works() {
-    let query = TestUser::find()
-        .select(TestUser::id.select());
+    let query = TestUser::find().select(TestUser::id.select());
 
     let sql = query.build_sql();
 
-    assert_eq!(
-        sql,
-        "SELECT id FROM users"
-    );
+    assert_eq!(sql, "SELECT id FROM users");
 }
 #[tokio::test]
 async fn query_all_works_with_transaction() {
@@ -1469,10 +1501,7 @@ async fn query_all_works_with_transaction() {
 
     let mut tx = db.begin().await.unwrap();
 
-    let users = TestUser::find()
-        .all(&mut tx)
-        .await
-        .unwrap();
+    let users = TestUser::find().all(&mut tx).await.unwrap();
 
     let _ = users;
 
@@ -1495,7 +1524,7 @@ async fn create_works_with_transaction() {
     .await
     .unwrap();
 
-    assert_eq!(user.name, "Transaction User");
+    assert_eq!(user.name, Some("Transaction User".to_string()));
 
     tx.rollback().await.unwrap();
 }
@@ -1517,7 +1546,7 @@ async fn update_works_with_transaction() {
     .await
     .unwrap();
 
-    assert_eq!(user.name, "Transaction Updated");
+    assert_eq!(user.name, Some("Transaction Updated".to_string()));
 
     tx.rollback().await.unwrap();
 }
@@ -1592,12 +1621,9 @@ async fn delete_many_works_with_transaction() {
     .await
     .unwrap();
 
-    let affected = TestUser::delete_many(
-        &mut tx,
-        TestUser::id.eq(user.id),
-    )
-    .await
-    .unwrap();
+    let affected = TestUser::delete_many(&mut tx, TestUser::id.eq(user.id))
+        .await
+        .unwrap();
 
     assert_eq!(affected, 1);
 
@@ -1629,12 +1655,104 @@ async fn create_many_works_with_transaction() {
     .unwrap();
 
     assert_eq!(users.len(), 3);
-    assert_eq!(users[0].name, "Transaction Create Many 1");
-    assert_eq!(users[1].name, "Transaction Create Many 2");
-    assert_eq!(users[2].name, "Transaction Create Many 3");
+
+    assert_eq!(users[0].name.as_deref(), Some("Transaction Create Many 1"));
+    assert_eq!(users[1].name.as_deref(), Some("Transaction Create Many 2"));
+    assert_eq!(users[2].name.as_deref(), Some("Transaction Create Many 3"));
 
     tx.rollback().await.unwrap();
 }
 
+#[test]
+fn bind_value_variants_are_collected_correctly() {
+    let date_time =
+        chrono::NaiveDateTime::parse_from_str("2026-01-15 12:30:45", "%Y-%m-%d %H:%M:%S").unwrap();
 
+    let decimal = rust_decimal::Decimal::new(12345, 2);
 
+    let json = serde_json::json!({
+        "name": "Fakhir",
+        "active": true
+    });
+
+    let expression = crate::query::expression::Expression::List(vec![
+        crate::query::expression::Expression::Value(BindValue::String("Fakhir".to_string())),
+        crate::query::expression::Expression::Value(BindValue::I64(42)),
+        crate::query::expression::Expression::Value(BindValue::Boolean(true)),
+        crate::query::expression::Expression::Value(BindValue::F64(3.25)),
+        crate::query::expression::Expression::Value(BindValue::DateTime(date_time)),
+        crate::query::expression::Expression::Value(BindValue::Decimal(decimal)),
+        crate::query::expression::Expression::Value(BindValue::Json(json.clone())),
+    ]);
+
+    let mut values = Vec::new();
+
+    crate::sql::collect_bind_values(&expression, &mut values);
+
+    assert_eq!(values.len(), 7);
+
+    match &values[0] {
+        BindValue::String(value) => assert_eq!(value, "Fakhir"),
+        _ => panic!("expected String"),
+    }
+
+    match &values[1] {
+        BindValue::I64(value) => assert_eq!(*value, 42),
+        _ => panic!("expected I64"),
+    }
+
+    match &values[2] {
+        BindValue::Boolean(value) => assert!(*value),
+        _ => panic!("expected Boolean"),
+    }
+
+    match &values[3] {
+        BindValue::F64(value) => assert_eq!(*value, 3.25),
+        _ => panic!("expected F64"),
+    }
+
+    match &values[4] {
+        BindValue::DateTime(value) => assert_eq!(*value, date_time),
+        _ => panic!("expected DateTime"),
+    }
+
+    match &values[5] {
+        BindValue::Decimal(value) => assert_eq!(*value, decimal),
+        _ => panic!("expected Decimal"),
+    }
+
+    match &values[6] {
+        BindValue::Json(value) => assert_eq!(value, &json),
+        _ => panic!("expected Json"),
+    }
+}
+
+#[test]
+fn is_null_expression_compiles_without_bind() {
+    let condition = TestUser::name.is_null();
+
+    let sql = crate::sql::compile_expression(&condition.expression, &mut 1);
+
+    assert_eq!(sql, "name IS NULL");
+
+    let mut values = Vec::new();
+
+    crate::sql::collect_bind_values(&condition.expression, &mut values);
+
+    assert!(values.is_empty());
+}
+
+#[test]
+fn is_not_null_expression_compiles_without_bind() {
+    let condition = TestUser::name.is_not_null();
+
+    let sql = crate::sql::compile_expression(&condition.expression, &mut 1);
+
+    assert_eq!(sql, "name IS NOT NULL");
+
+    let mut values = Vec::new();
+
+    crate::sql::collect_bind_values(&condition.expression, &mut values);
+
+    assert!(values.is_empty());
+}

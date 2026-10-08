@@ -97,14 +97,31 @@ pub(crate) fn compile_expression(expression: &Expression, next_placeholder: &mut
                 AggregateFunction::Avg => {
                     format!("AVG({})", expression_sql)
                 }
+
                 AggregateFunction::Min => {
                     format!("MIN({})", expression_sql)
                 }
+
                 AggregateFunction::Max => {
                     format!("MAX({})", expression_sql)
                 }
             }
         }
+
+        Expression::IsNull(expression) => {
+            format!(
+                "{} IS NULL",
+                compile_expression(expression, next_placeholder)
+            )
+        }
+
+        Expression::IsNotNull(expression) => {
+            format!(
+                "{} IS NOT NULL",
+                compile_expression(expression, next_placeholder)
+            )
+        }
+
         Expression::Subquery(subquery) => {
             let offset = *next_placeholder - 1;
             let sql = offset_placeholders(&subquery.sql, offset);
@@ -128,19 +145,53 @@ pub(crate) fn collect_bind_values(expression: &Expression, values: &mut Vec<Bind
             BindValue::I64(value) => {
                 values.push(BindValue::I64(*value));
             }
+
+            BindValue::Boolean(value) => {
+                values.push(BindValue::Boolean(*value));
+            }
+
+            BindValue::F64(value) => {
+                values.push(BindValue::F64(*value));
+            }
+
+            BindValue::DateTime(value) => {
+                values.push(BindValue::DateTime(*value));
+            }
+
+            BindValue::Decimal(value) => {
+                values.push(BindValue::Decimal(*value));
+            }
+
+            BindValue::Json(value) => {
+                values.push(BindValue::Json(value.clone()));
+            }
+
+            BindValue::Null => {}
         },
+
         Expression::Function { expression, .. } => {
             collect_bind_values(expression, values);
         }
+
         Expression::Binary { left, right, .. } => {
             collect_bind_values(left, values);
             collect_bind_values(right, values);
         }
+
         Expression::List(expressions) => {
             for expression in expressions {
                 collect_bind_values(expression, values);
             }
         }
+
+        Expression::IsNull(expression) => {
+            collect_bind_values(expression, values);
+        }
+
+        Expression::IsNotNull(expression) => {
+            collect_bind_values(expression, values);
+        }
+
         Expression::Subquery(subquery) => {
             values.extend(subquery.binds.iter().cloned());
         }

@@ -4,11 +4,11 @@
 
 RustORM aims to bring the developer experience of Prisma/Drizzle to the Rust ecosystem: a schema file, a CLI, and type-safe generated entities, without requiring users to write ORM-specific derive macros.
 
-> ⚠️ **Status:** Early development. The runtime query builder, relations, CRUD operations, bulk operations, and transaction support are functional and tested. The schema language, CLI, code generation, and migrations are still under development.
+> ⚠️ **Status:** Early development. The runtime query builder, relations, CRUD operations, bulk operations, transactions, PostgreSQL execution, and the core BindValue layer are functional and tested. The separate CLI already has a working schema language, parser, validator, entity/relation generator, and create-input generation. CRUD generation and migrations are still under development.
 
 ---
 
-## Why RustORM?
+# Why RustORM?
 
 Rust has powerful database libraries and ORMs, but many approaches involve significant boilerplate, macros, or manually maintained models.
 
@@ -24,7 +24,7 @@ RustORM takes a schema-driven approach:
 | **SeaORM** (Rust) | ⭐⭐ Good | ⚠️ Generated | ⚠️ Generated |
 | **Diesel** (Rust) | ⭐ Complex | ❌ No | ⚠️ Complex |
 | **SQLx** (Rust) | ⭐ Raw SQL | ❌ No | ❌ Manual |
-| **RustORM** (Rust) | 🚧 In Progress | 🚧 Planned | 🚧 In Progress |
+| **RustORM** (Rust) | 🚧 In Progress | 🚧 In Progress | 🚧 In Progress |
 
 The long-term goal is simple:
 
@@ -36,7 +36,7 @@ The long-term goal is simple:
 
 ## 1. Define Your Schema
 
-The planned schema language will look roughly like:
+The planned schema language looks roughly like:
 
 ```rust
 // .rustorm/schema.rustorm
@@ -58,7 +58,7 @@ model Post {
 
 ## 2. Generate Entities and Migrations
 
-The intended workflow:
+The intended workflow is:
 
 ```bash
 rustorm dev
@@ -95,9 +95,27 @@ The long-term workflow:
 
 # Current State
 
-The **runtime query engine is functional and heavily tested**.
+RustORM currently consists of two intentionally separate projects:
 
-RustORM currently supports:
+```text
+Runtime
+G:\Rust-ORM\rustorm
+
+CLI
+G:\RustORM-CLI
+```
+
+The runtime provides the database/query layer.
+
+The CLI provides schema parsing and code generation.
+
+The CLI generates code for the existing RustORM runtime; it does not reimplement the runtime.
+
+---
+
+# Runtime
+
+The RustORM runtime currently provides:
 
 - Type-safe query construction
 - Parameterized SQL
@@ -111,19 +129,20 @@ RustORM currently supports:
 - Subqueries
 - Qualified columns
 - Relation metadata
-- Eager relation loading infrastructure
+- Eager relation loading
 - Single-row CRUD
 - Bulk CRUD
 - PostgreSQL execution
+- Connection pools
 - Transactions
+- Multiple BindValue types
+- Nullable model support
 
-The runtime is designed to remain independent from the future schema parser and code-generation layer.
+The runtime is designed to remain independent from the schema parser and code-generation layer.
 
 ---
 
-# What Works Today
-
-## Entity System
+# Entity System
 
 The runtime currently provides:
 
@@ -141,7 +160,7 @@ pub struct User;
 
 pub struct UserModel {
     pub id: i32,
-    pub name: String,
+    pub name: Option<String>,
 }
 
 impl Entity for User {
@@ -160,7 +179,7 @@ impl Entity for User {
 
 # Conditions
 
-Supported operators:
+Supported operators include:
 
 - ✅ `eq`
 - ✅ `not_eq`
@@ -170,8 +189,8 @@ Supported operators:
 - ✅ `lte`
 - ✅ `and`
 - ✅ `or`
-
-Values are collected separately from SQL generation and passed to SQLx as parameters.
+- ✅ `is_null`
+- ✅ `is_not_null`
 
 Example:
 
@@ -185,6 +204,15 @@ let users = User::find()
     .all(&db)
     .await?;
 ```
+
+NULL conditions use SQL's dedicated NULL semantics:
+
+```rust
+User::name.is_null()
+User::name.is_not_null()
+```
+
+rather than treating NULL as an ordinary equality value.
 
 ---
 
@@ -232,7 +260,7 @@ let stats = User::find()
     .await?;
 ```
 
-Aggregate SQL generation and integration behavior are covered by tests.
+Aggregate SQL generation and behavior are covered by tests.
 
 ---
 
@@ -278,18 +306,18 @@ let users = User::find()
     .await?;
 ```
 
-The compiler also handles bind propagation and placeholder offsets for subqueries.
+The compiler handles bind propagation and placeholder offsets for subqueries.
 
 ---
 
 # Relations
 
-Relation metadata is currently implemented for:
+Relation metadata is implemented for:
 
-- ✅ One-to-many
-- ✅ Many-to-one
-- ✅ One-to-one
-- ✅ Many-to-many
+- ✅ One-to-Many
+- ✅ Many-to-One
+- ✅ One-to-One
+- ✅ Many-to-Many
 
 Conceptually:
 
@@ -305,9 +333,9 @@ Post
 
 The relation system supports relation-specific query behavior and foreign-key filtering.
 
-### Eager Loading
+## Eager Loading
 
-The runtime currently contains:
+The runtime currently supports:
 
 - ✅ `.with(...)`
 - ✅ Foreign-key filtering
@@ -346,6 +374,7 @@ let user = User::create(
 - ✅ Parameterized values
 - ✅ `RETURNING`
 - ✅ Returns generated model
+- ✅ NULL values
 
 ---
 
@@ -372,6 +401,8 @@ let users = User::create_many(
 - ✅ Returns created models
 - ✅ Empty input handling
 
+NULL support in bulk CRUD is still being hardened.
+
 ---
 
 ## Update One
@@ -397,10 +428,13 @@ UserUpdate {
 
 Fields set to `None` are excluded from the generated `SET` clause.
 
+Explicit NULL updates are represented separately from omitted fields.
+
 - ✅ Single-row UPDATE
 - ✅ Partial updates
 - ✅ `RETURNING`
 - ✅ PostgreSQL execution
+- ✅ Explicit NULL updates
 
 ---
 
@@ -421,6 +455,8 @@ let affected = User::update_many(
 - ✅ Parameterized conditions
 - ✅ Correct bind ordering
 - ✅ Returns affected-row count
+
+Bulk NULL handling is still being hardened.
 
 ---
 
@@ -457,11 +493,48 @@ let affected = User::delete_many(
 
 ---
 
+# Bind Values
+
+The runtime value layer currently supports:
+
+```rust
+BindValue::String(String)
+BindValue::I64(i64)
+BindValue::Boolean(bool)
+BindValue::F64(f64)
+BindValue::DateTime(chrono::NaiveDateTime)
+BindValue::Decimal(rust_decimal::Decimal)
+BindValue::Json(serde_json::Value)
+BindValue::Null
+```
+
+The PostgreSQL executor supports the corresponding non-NULL values through SQLx.
+
+NULL uses explicit SQL semantics:
+
+```text
+BindValue::Null
+      ↓
+SQL literal NULL
+      ↓
+PostgreSQL NULL
+      ↓
+Option<T>::None
+```
+
+`BindValue::Null` is intentionally not collected as a SQL placeholder because NULL is represented directly in SQL.
+
+The runtime currently verifies NULL behavior for single-row INSERT and UPDATE.
+
+Additional bulk NULL and mixed placeholder-order tests remain part of the current hardening work.
+
+---
+
 # Transactions
 
 RustORM's database APIs support both connection pools and SQLx PostgreSQL transactions through `Acquire<Postgres>`.
 
-For example:
+Example:
 
 ```rust
 let mut tx = db.begin().await?;
@@ -521,7 +594,7 @@ rather than:
 WHERE name = 'some-user-input'
 ```
 
-Values are collected separately from SQL generation and bound through `sqlx`.
+Values are collected separately from SQL generation and bound through SQLx.
 
 This prevents application values from being directly interpolated into generated SQL.
 
@@ -529,9 +602,7 @@ This prevents application values from being directly interpolated into generated
 
 # Testing
 
-The runtime currently has an extensive test suite.
-
-Tests cover:
+The runtime currently has an extensive test suite covering:
 
 - Comparison operators
 - Logical `AND`
@@ -553,6 +624,9 @@ Tests cover:
 - Relation metadata
 - Foreign-key filtering
 - Bind-value ordering
+- NULL expressions
+- NULL INSERT
+- NULL UPDATE
 - Query compilation
 - CRUD execution
 - Bulk CRUD operations
@@ -560,14 +634,14 @@ Tests cover:
 - Transactional CRUD execution
 - Transactional relation loading
 
-Current verification:
+Current runtime verification:
 
 ```text
 cargo check
     ✅
 
 cargo test
-    ✅ 104 passed
+    ✅ 109 passed
     ❌ 0 failed
 
 cargo clippy --all-targets --all-features -- -D warnings
@@ -578,24 +652,46 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 # Architecture
 
-RustORM is intended to have three major layers:
+RustORM intentionally separates the runtime and CLI.
 
 ```text
-your-app
-    │
-    ├──────────────► generated entities
-    │                       │
-    │                       ▼
-    └──────────────► rustorm runtime
+                    ┌─────────────────────┐
+                    │ .rustorm/schema     │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   rustorm CLI       │
+                    │ Parser / Validator  │
+                    │ Code Generator      │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ Generated Rust      │
+                    │ Models / Entities   │
+                    │ Relations / CRUD    │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ RustORM Runtime     │
+                    │ Query / SQL / CRUD  │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                         PostgreSQL
 ```
 
-| Layer | Crate | Responsibility |
+| Layer | Project | Responsibility |
 | --- | --- | --- |
-| **Runtime** | `rustorm` | Query engine, entities, fields, SQL expressions, compilation and execution |
-| **Generated** | `rustorm-entities` | Generated models, fields and relation metadata |
-| **CLI** | `rustorm-cli` | Schema parsing, entity generation and migration management |
+| **Runtime** | `G:\Rust-ORM\rustorm` | Query engine, fields, expressions, SQL compilation, BindValue, CRUD and execution |
+| **CLI** | `G:\RustORM-CLI` | Schema parsing, validation and code generation |
+| **Generated code** | Produced by CLI | Models, entities, fields, relations and CRUD input types |
 
-The generated and CLI crates are part of the planned schema-driven architecture and are not yet complete.
+The CLI generates code for the existing RustORM runtime.
+
+The runtime does not depend on the CLI.
 
 ---
 
@@ -618,62 +714,129 @@ The runtime does not need to know an application's complete schema.
 
 ---
 
-# Generated Entities
+# CLI
 
-The planned generated layer will contain:
+The CLI is being developed separately in:
 
-- Model structs
-- Entity definitions
-- Field constants
-- Relation metadata
-- Create input types
-- Update input types
+```text
+G:\RustORM-CLI
+```
 
-Generated code is intended to remain readable and inspectable Rust.
+Current CLI V0.1 provides:
+
+- ✅ Schema language
+- ✅ Lexer
+- ✅ Parser
+- ✅ AST / Representation
+- ✅ Validator
+- ✅ Entity generation
+- ✅ Model generation
+- ✅ Field generation
+- ✅ Scalar types
+- ✅ Nullable types
+- ✅ Array types
+- ✅ `@map`
+- ✅ `@@map`
+- ✅ One-to-Many relations
+- ✅ Many-to-One relations
+- ✅ One-to-One relations
+- ✅ Many-to-Many relations
+- ✅ RelationKey
+- ✅ Relation-key `@map`
+- ✅ Create structs
+
+Current CLI verification:
+
+```text
+Tests:
+42 passed
+
+Clippy:
+clean
+```
 
 ---
 
-# CLI
+# CLI CRUD Generation
 
-The planned CLI will manage the schema-driven workflow:
+The next CLI milestone is CRUD code generation.
 
-```bash
-rustorm init
-rustorm dev
-rustorm generate
-rustorm migrate
+Planned/generated pieces:
+
+```text
+Create inputs
+      ↓
+InsertData
+      ↓
+Update structs
+      ↓
+UpdateData
 ```
 
-The CLI is not yet implemented.
+The runtime BindValue contract has now been expanded sufficiently to begin this work.
+
+Nullable updates must preserve the distinction between:
+
+```text
+field omitted
+```
+
+and:
+
+```text
+field explicitly set to NULL
+```
+
+This distinction is important for generated `UpdateData` implementations.
 
 ---
 
 # Schema
 
-The schema system is planned as the source of truth for:
+The schema language and parser are being developed in the separate CLI project.
+
+The intended source of truth is:
 
 ```text
-schema
-   ↓
-entities
-   ↓
-queries
-   ↓
-migrations
+.rustorm/schema.rustorm
 ```
 
-Planned schema capabilities include:
+Example:
 
-- Models
-- Scalar types
-- Relations
-- IDs
-- Defaults
-- Unique constraints
-- Indexes
-- Relation attributes
+```rust
+model User {
+    id    Int    @id @auto
+    name  String
+    email String @unique
+    posts Post[]
+}
+```
 
-The schema parser and validation system are not yet implemented.
+The schema system currently has working parsing, representation, and validation infrastructure in CLI V0.1.
+
+---
+
+# Generated Entities
+
+The CLI generator currently supports:
+
+- Model structs
+- Entity definitions
+- Field constants
+- Scalar Rust types
+- Nullable Rust types
+- Array Rust types
+- `@map`
+- `@@map`
+- One-to-Many relations
+- Many-to-One relations
+- One-to-One relations
+- Many-to-Many relations
+- RelationKey
+- Relation-key `@map`
+- Create structs
+
+Generated code is intended to remain readable and inspectable Rust.
 
 ---
 
@@ -745,7 +908,7 @@ Users should be able to inspect generated files and understand what RustORM prod
 
 ## 5. Works Without a Live Database
 
-The future schema-driven workflow should be able to generate entities from:
+The schema-driven workflow should be able to generate entities from:
 
 ```text
 .rustorm/schema.rustorm
@@ -783,13 +946,15 @@ CRUD
      ↓
 Transactions
      ↓
-Schema
+BindValue
+     ↓
+Schema / CLI
      ↓
 Code Generation
      ↓
 Migrations
      ↓
-CLI
+CLI Workflow
 ```
 
 ---
@@ -841,6 +1006,23 @@ UPDATE MANY             ✅
 DELETE MANY             ✅
 ```
 
+## Bind Values
+
+```text
+String                  ✅
+I64                     ✅
+Boolean                 ✅
+F64                     ✅
+DateTime                ✅
+Decimal                 ✅
+JSON                    ✅
+NULL                    ✅
+PostgreSQL binding      ✅
+Single-row NULL tests   ✅
+Bulk NULL tests         ⬜
+Mixed bind ordering     ⬜
+```
+
 ## Runtime
 
 ```text
@@ -859,13 +1041,28 @@ UNION                   ⬜
 FOR UPDATE              ⬜
 ```
 
-## Schema
+## Schema / CLI
 
 ```text
-schema.rustorm          ⬜
-Parser                  ⬜
-Representation          ⬜
-Validation              ⬜
+Schema language         ✅
+Lexer                   ✅
+Parser                  ✅
+Representation          ✅
+Validation              ✅
+```
+
+## Generator
+
+```text
+Entities                ✅
+Models                  ✅
+Fields                  ✅
+Relations               ✅
+Create inputs           ✅
+InsertData              ⬜
+Update inputs           ⬜
+UpdateData              ⬜
+Client API              ⬜
 ```
 
 ## Migrations
@@ -876,18 +1073,6 @@ Run                     ⬜
 Rollback                ⬜
 Migration tracking      ⬜
 Schema diffing          ⬜
-```
-
-## Generator
-
-```text
-Entities                ⬜
-Models                  ⬜
-Fields                  ⬜
-Relations               ⬜
-Create inputs           ⬜
-Update inputs           ⬜
-Client API              ⬜
 ```
 
 ## CLI
@@ -913,7 +1098,11 @@ Multi-DB architecture   ⬜
 
 # Current Project Structure
 
+## Runtime
+
 ```text
+G:\Rust-ORM\rustorm
+
 src/
 ├── entity/
 │   └── mod.rs
@@ -941,7 +1130,7 @@ src/
 └── main.rs
 ```
 
-The runtime responsibilities are separated into:
+Runtime responsibilities:
 
 ```text
 Entity
@@ -965,31 +1154,47 @@ Entity
           └── Transactions
 ```
 
+## CLI
+
+```text
+G:\RustORM-CLI
+```
+
+The CLI is maintained independently from the runtime.
+
 ---
 
 # Getting Started
 
-> ⚠️ The schema-driven CLI is not available yet. The current runtime requires manually defined entities.
+> ⚠️ The schema-driven CLI workflow is still under development. The current runtime can be used with manually defined entities.
 
 ## PostgreSQL
 
-RustORM currently targets PostgreSQL through `sqlx`.
+RustORM currently targets PostgreSQL through SQLx.
 
 Example dependencies:
 
 ```toml
 [dependencies]
 rustorm = "0.1"
+
 sqlx = { version = "0.8", features = [
     "runtime-tokio",
     "postgres",
     "macros",
-    "bigdecimal"
+    "rust_decimal",
+    "chrono",
+    "json"
 ] }
+
 tokio = { version = "1", features = [
     "macros",
     "rt-multi-thread"
 ] }
+
+chrono = "0.4"
+rust_decimal = "1"
+serde_json = "1"
 ```
 
 ## Define an Entity
@@ -1006,7 +1211,7 @@ pub struct User;
 
 pub struct UserModel {
     pub id: i32,
-    pub name: String,
+    pub name: Option<String>,
 }
 
 impl Entity for User {
@@ -1095,58 +1300,40 @@ Database
 
 # What's Next?
 
-The next major milestone is the **schema-driven developer workflow**.
-
-### Schema
+The immediate development focus is the **CLI CRUD generation layer**.
 
 ```text
-.rustorm/schema.rustorm
-        ↓
-     Parser
-        ↓
-   Schema AST
-        ↓
-   Validation
+G:\RustORM-CLI
+
+Existing
+   ↓
+Schema language
+   ↓
+Lexer
+   ↓
+Parser
+   ↓
+Representation
+   ↓
+Validation
+   ↓
+Entity / Relation generation
+   ↓
+Create structs
+   ↓
+────────────────────
+NEXT
+   ↓
+InsertData generation
+   ↓
+Update structs
+   ↓
+UpdateData generation
 ```
 
-### Code Generation
+The runtime BindValue contract has already been expanded to support the types required by the generated CRUD layer.
 
-```text
-Validated Schema
-       ↓
- Entity Generator
-       ↓
- Model Generator
-       ↓
- Field Generator
-       ↓
- Relation Generator
-       ↓
- Create / Update Inputs
-```
-
-### CLI
-
-```text
-rustorm init
-rustorm dev
-rustorm generate
-rustorm migrate
-```
-
-The goal is to move from manually maintained entities toward:
-
-```text
-.rustorm/schema.rustorm
-          ↓
-       rustorm
-          ↓
-   Generated Rust
-          ↓
- Type-safe Queries
-          ↓
-       Database
-```
+The next goal is to make generated CRUD code compile cleanly against the existing RustORM runtime.
 
 ---
 
@@ -1251,17 +1438,51 @@ The project is also inspired by the frustration of writing macros and repetitive
 
 RustORM is currently in **early development**.
 
-The runtime query builder, relations, CRUD operations, bulk operations, and transaction support are functional and tested.
+The runtime query engine, relations, CRUD operations, bulk operations, transaction support, PostgreSQL execution, and BindValue layer are functional and tested.
 
-Current verification:
+Current runtime verification:
 
 ```text
-104 tests passed
-0 tests failed
-Clippy: clean
+cargo check
+    ✅
+
+cargo test
+    ✅ 109 passed
+    ❌ 0 failed
+
+cargo clippy --all-targets --all-features -- -D warnings
+    ✅
 ```
 
-The next major milestone is the schema-driven developer workflow:
+The separate CLI currently has:
+
+```text
+Schema language        ✅
+Lexer                  ✅
+Parser                 ✅
+Representation         ✅
+Validator              ✅
+Entity generator       ✅
+Relation generator     ✅
+Create structs         ✅
+
+Tests                  42 passed
+Clippy                 clean
+```
+
+The immediate next milestone is:
+
+```text
+CLI CRUD generation
+        ↓
+InsertData
+        ↓
+Update inputs
+        ↓
+UpdateData
+```
+
+The long-term goal remains:
 
 ```text
 .rustorm/schema.rustorm

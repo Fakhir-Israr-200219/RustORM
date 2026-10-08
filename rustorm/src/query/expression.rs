@@ -38,5 +38,7 @@ pub(crate) enum Expression {
         operator: BinaryOperator,
         right: Box<Expression>,
     },
+    IsNull(Box<Expression>),
+    IsNotNull(Box<Expression>),
     Subquery(Subquery),
 }

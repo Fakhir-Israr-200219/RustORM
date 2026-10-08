@@ -21,12 +21,22 @@ where
 
     let mut sql = format!("INSERT INTO {} ({}) VALUES (", E::TABLE, columns.join(", "));
 
-    for (index, _) in values.iter().enumerate() {
+    let mut bind_index = 1;
+
+    for (index, value) in values.iter().enumerate() {
         if index > 0 {
             sql.push_str(", ");
         }
 
-        sql.push_str(&format!("${}", index + 1));
+        match value {
+            BindValue::Null => {
+                sql.push_str("NULL");
+            }
+            _ => {
+                sql.push_str(&format!("${}", bind_index));
+                bind_index += 1;
+            }
+        }
     }
 
     sql.push_str(") RETURNING ");
@@ -43,8 +53,30 @@ where
 
     for value in values {
         match value {
-            BindValue::String(value) => query = query.bind(value),
-            BindValue::I64(value) => query = query.bind(value),
+            BindValue::String(value) => {
+                query = query.bind(value);
+            }
+            BindValue::I64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Boolean(value) => {
+                query = query.bind(value);
+            }
+            BindValue::F64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::DateTime(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Decimal(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Json(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Null => {
+                // NULL handling will be handled at SQL-expression level.
+            }
         }
     }
 
@@ -82,9 +114,16 @@ where
                 sql.push_str(", ");
             }
 
-            let bind_index = values.len() + 1;
-            sql.push_str(&format!("${}", bind_index));
-            values.push(value);
+            match &value {
+                BindValue::Null => {
+                    sql.push_str("NULL");
+                }
+                _ => {
+                    let bind_index = values.len() + 1;
+                    sql.push_str(&format!("${}", bind_index));
+                    values.push(value);
+                }
+            }
         }
 
         sql.push(')');
@@ -110,8 +149,30 @@ where
 
     for value in values {
         match value {
-            BindValue::String(value) => query = query.bind(value),
-            BindValue::I64(value) => query = query.bind(value),
+            BindValue::String(value) => {
+                query = query.bind(value);
+            }
+            BindValue::I64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Boolean(value) => {
+                query = query.bind(value);
+            }
+            BindValue::F64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::DateTime(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Decimal(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Json(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Null => {
+                // NULL handling will be handled at SQL-expression level.
+            }
         }
     }
 
@@ -140,11 +201,18 @@ where
             "UPDATE requires at least one field".into(),
         ));
     }
-
+    let mut bind_index = 1;
     let set_clause = columns
         .iter()
-        .enumerate()
-        .map(|(index, column)| format!("{} = ${}", column, index + 1))
+        .zip(values.iter())
+        .map(|(column, value)| match value {
+            BindValue::Null => format!("{} = NULL", column),
+            _ => {
+                let placeholder = format!("${}", bind_index);
+                bind_index += 1;
+                format!("{} = {}", column, placeholder)
+            }
+        })
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -158,7 +226,7 @@ where
         "UPDATE {} SET {} WHERE id = ${} RETURNING {}",
         E::TABLE,
         set_clause,
-        values.len() + 1,
+        bind_index,
         returning
     );
 
@@ -166,8 +234,30 @@ where
 
     for value in values {
         match value {
-            BindValue::String(value) => query = query.bind(value),
-            BindValue::I64(value) => query = query.bind(value),
+            BindValue::String(value) => {
+                query = query.bind(value);
+            }
+            BindValue::I64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Boolean(value) => {
+                query = query.bind(value);
+            }
+            BindValue::F64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::DateTime(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Decimal(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Json(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Null => {
+                // NULL handling will be handled at SQL-expression level.
+            }
         }
     }
 
@@ -215,11 +305,15 @@ where
 
     let set_clause = columns
         .iter()
-        .map(|column| {
-            let placeholder = format!("${}", next_placeholder);
-            next_placeholder += 1;
+        .zip(values.iter())
+        .map(|(column, value)| match value {
+            BindValue::Null => format!("{} = NULL", column),
+            _ => {
+                let placeholder = format!("${}", next_placeholder);
+                next_placeholder += 1;
 
-            format!("{} = {}", column, placeholder)
+                format!("{} = {}", column, placeholder)
+            }
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -248,6 +342,24 @@ where
             }
             BindValue::I64(value) => {
                 query = query.bind(value);
+            }
+            BindValue::Boolean(value) => {
+                query = query.bind(value);
+            }
+            BindValue::F64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::DateTime(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Decimal(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Json(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Null => {
+                // NULL handling will be handled at SQL-expression level.
             }
         }
     }
@@ -283,6 +395,24 @@ where
             }
             BindValue::I64(value) => {
                 query = query.bind(value);
+            }
+            BindValue::Boolean(value) => {
+                query = query.bind(value);
+            }
+            BindValue::F64(value) => {
+                query = query.bind(value);
+            }
+            BindValue::DateTime(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Decimal(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Json(value) => {
+                query = query.bind(value);
+            }
+            BindValue::Null => {
+                // NULL handling will be handled at SQL-expression level.
             }
         }
     }

@@ -431,6 +431,24 @@ where
                 BindValue::I64(value) => {
                     query = query.bind(value);
                 }
+                BindValue::Boolean(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::F64(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::DateTime(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Decimal(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Json(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Null => {
+                    // NULL handling will be implemented at the SQL-expression level.
+                }
             }
         }
 
@@ -461,6 +479,24 @@ where
                 BindValue::I64(value) => {
                     query = query.bind(value);
                 }
+                BindValue::Boolean(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::F64(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::DateTime(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Decimal(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Json(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Null => {
+                    // NULL handling will be implemented at the SQL-expression level.
+                }
             }
         }
 
@@ -481,6 +517,24 @@ where
                 }
                 BindValue::I64(value) => {
                     query = query.bind(value);
+                }
+                BindValue::Boolean(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::F64(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::DateTime(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Decimal(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Json(value) => {
+                    query = query.bind(value);
+                }
+                BindValue::Null => {
+                    // NULL handling will be implemented at the SQL-expression level.
                 }
             }
         }
