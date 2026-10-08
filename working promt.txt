@@ -1,3 +1,7 @@
+RUSTORM — WORKING ROADMAP / CHECKPOINT
+=======================================
+
+
 QUERY ENGINE
 ├── WHERE                  ✅
 ├── Operators              ✅
@@ -17,6 +21,7 @@ QUERY ENGINE
 ├── Qualified columns      ✅
 └── count() execution      ⬜
 
+
 RELATIONS
 ├── One-to-Many            ✅
 ├── Many-to-One            ✅
@@ -26,6 +31,7 @@ RELATIONS
 ├── Eager loading          ✅
 └── Nested .with()         ⬜
 
+
 CRUD
 ├── INSERT                 ✅
 ├── UPDATE                 ✅
@@ -34,6 +40,7 @@ CRUD
 ├── UPDATE MANY            ✅
 └── DELETE MANY            ✅
 
+
 RUNTIME
 ├── Executor               ✅
 ├── PostgreSQL             ✅
@@ -41,26 +48,77 @@ RUNTIME
 ├── Error handling         ⚠️
 └── Transactions           ✅
 
+
+BIND VALUES
+├── String                 ✅
+├── I64                    ✅
+├── Boolean                ⬜
+├── F64                    ⬜
+├── DateTime               ⬜
+├── Decimal                ⬜
+├── JSON                   ⬜
+├── NULL                   ⬜
+├── Executor binding       ⬜
+└── Runtime tests          ⬜
+
+
 ADVANCED SQL
 ├── CTE                    ⬜
 ├── UNION                  ⬜
 └── FOR UPDATE             ⬜
 
-SCHEMA
-├── schema.rustorm         ⬜
-├── Parser                 ⬜
-├── Representation         ⬜
-└── Validation             ⬜
+
+SCHEMA / CLI
+├── schema.rustorm         ⏸️
+├── Lexer                  ⏸️
+├── Parser                 ⏸️
+├── Representation         ⏸️
+└── Validation             ⏸️
+
+NOTE:
+Schema/CLI work is being developed separately in:
+
+G:\RustORM-CLI
+
+The current CLI V0.1 schema language, lexer, parser,
+AST, and validator are complete.
+
 
 MIGRATIONS
 ├── Generate               ⬜
 ├── Run                    ⬜
 └── Rollback               ⬜
 
+
 GENERATOR
-├── Entities               ⬜
-├── Relations              ⬜
+├── Entities               ⏸️
+├── Relations              ⏸️
 └── Client API             ⬜
+
+NOTE:
+Entity and relation generation already exist in the separate
+RustORM CLI project.
+
+Current CLI generator supports:
+- Entity generation
+- Model structs
+- Entity structs
+- Entity implementation
+- Columns
+- Field constants
+- Scalar Rust types
+- Nullable Rust types
+- Array Rust types
+- @map
+- @@map
+- One-to-Many
+- Many-to-One
+- One-to-One
+- Many-to-Many
+- RelationKey
+- @map relation keys
+- Create structs
+
 
 CLI
 ├── init                   ⬜
@@ -68,9 +126,276 @@ CLI
 ├── generate               ⬜
 └── migration              ⬜
 
+
 QUALITY
 ├── Test extraction        ⬜
 ├── Visibility cleanup     ⬜
 ├── Clippy                 ✅
 ├── Documentation          ⬜
 └── Multi-DB architecture  ⬜
+
+
+
+CURRENT PROJECT STATUS
+======================
+
+RUNTIME
+-------
+
+Project:
+G:\Rust-ORM\rustorm
+
+The RustORM runtime currently provides:
+
+- Query builder
+- Conditions
+- Operators
+- AND / OR
+- ORDER BY
+- LIMIT / OFFSET
+- DISTINCT
+- GROUP BY
+- HAVING
+- Aggregates
+- JOINs
+- CROSS JOIN
+- Multiple JOINs
+- IN
+- Basic subqueries
+- Subquery bind propagation
+- Qualified columns
+- CRUD
+- Bulk CRUD
+- PostgreSQL executor
+- Connection pool
+- Transactions
+- One-to-Many relations
+- Many-to-One relations
+- One-to-One relations
+- Many-to-Many relations
+- Eager loading
+- .with()
+
+
+CURRENT RUNTIME LIMITATION
+--------------------------
+
+BindValue currently contains:
+
+    String(String)
+    I64(i64)
+
+The PostgreSQL executor currently binds these supported
+BindValue variants.
+
+The runtime value layer needs to be expanded before the
+CLI CRUD generator is resumed.
+
+
+CLI
+---
+
+Project:
+
+G:\RustORM-CLI
+
+The CLI is intentionally maintained as a separate project.
+
+Current CLI V0.1 status:
+
+- Schema language                    ✅
+- Lexer                              ✅
+- Parser                             ✅
+- AST / Representation               ✅
+- Validator                          ✅
+- Entity generator                   ✅
+- Relation generator                 ✅
+- Many-to-Many generation            ✅
+- Create structs                     ✅
+- Tests                              42 passed
+- Clippy                             clean
+
+CLI CRUD generation is currently paused:
+
+- InsertData generation              ⏸️
+- Update structs                     ⏸️
+- UpdateData generation              ⏸️
+
+Reason:
+
+The runtime BindValue contract currently supports only
+String and I64. The runtime value/binding layer should be
+expanded first so that generated CRUD code is based on a
+stable runtime contract.
+
+
+
+CURRENT WORK
+============
+
+BIND VALUE EXPANSION
+--------------------
+
+Current:
+
+├── String(String)         ✅
+└── I64(i64)               ✅
+
+Next:
+
+├── Boolean                ⬜
+├── F64                    ⬜
+├── DateTime               ⬜
+├── Decimal                ⬜
+├── JSON                   ⬜
+├── NULL                   ⬜
+├── PostgreSQL binding     ⬜
+└── Runtime tests          ⬜
+
+
+
+NEXT AFTER BIND VALUES
+======================
+
+1. Complete BindValue support.
+
+2. Update PostgreSQL executor binding.
+
+3. Add runtime tests for every supported BindValue type.
+
+4. Run:
+
+   cargo test
+
+5. Run:
+
+   cargo clippy --all-targets --all-features -- -D warnings
+
+6. Return to:
+
+   G:\RustORM-CLI
+
+7. Resume CLI CRUD generation:
+
+   ├── InsertData generation
+   ├── Update structs
+   └── UpdateData generation
+
+
+
+IMPORTANT ARCHITECTURE RULE
+===========================
+
+RustORM Runtime and RustORM CLI remain separate projects.
+
+Runtime:
+
+G:\Rust-ORM\rustorm
+
+CLI:
+
+G:\RustORM-CLI
+
+The CLI generates code for the existing RustORM runtime.
+
+The CLI must not reimplement the runtime.
+
+Do not introduce a rustorm-core project unless explicitly
+decided later.
+
+
+
+CURRENT ROADMAP ORDER
+=====================
+
+Runtime
+   ↓
+BindValue expansion
+   ↓
+PostgreSQL executor binding
+   ↓
+Runtime tests
+   ↓
+CLI CRUD generation
+   ↓
+Migration generator
+   ↓
+CLI commands
+   ↓
+Project integration
+   ↓
+Quality / documentation
+   ↓
+Advanced SQL features
+
+
+
+CURRENT WORKING INSTRUCTIONS
+============================
+
+1. Work only on the current checkpoint.
+
+2. Do not restart or redesign completed systems without a
+   concrete technical reason.
+
+3. Immediate priority is BindValue expansion.
+
+4. Work in small, focused steps.
+
+5. Before changing code, inspect the current implementation
+   instead of assuming its state.
+
+6. Preserve existing String and I64 behavior while adding
+   new BindValue variants.
+
+7. Every new BindValue type must have correct PostgreSQL
+   executor binding.
+
+8. Add focused runtime tests for every supported type.
+
+9. Do not resume CLI CRUD generation until the runtime
+   BindValue contract is sufficiently complete.
+
+10. Do not silently invent nullable Update semantics.
+
+    In particular, distinguish carefully between:
+
+    - field not being updated
+    - field being updated to NULL
+
+    This decision must be explicit before implementing
+    nullable UpdateData generation.
+
+11. Do not mark a feature ✅ merely because an API or type
+    exists. The feature must compile and have appropriate
+    tests.
+
+12. After every meaningful milestone, run:
+
+    cargo test
+
+    and:
+
+    cargo clippy --all-targets --all-features -- -D warnings
+
+13. Update this working prompt/checklist after completing
+    a meaningful milestone.
+
+14. When continuing work in a new session:
+
+    ├── Read this file first.
+    ├── Check the actual source code.
+    ├── Check the current tests.
+    ├── Continue from CURRENT WORK.
+    └── Do not repeat completed work.
+
+15. Avoid unrelated refactors while working on the current
+    milestone.
+
+16. Keep Runtime and CLI architecture separate.
+
+17. Current immediate objective:
+
+    Make the RustORM runtime value/binding layer sufficiently
+    complete and tested so that CLI CRUD code generation can
+    safely resume.
