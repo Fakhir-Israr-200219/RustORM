@@ -1,6 +1,3 @@
----
-
-```markdown
 # RustORM
 
 **A schema-driven, Prisma-inspired ORM for Rust.**
