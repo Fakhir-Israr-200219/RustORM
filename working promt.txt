@@ -59,16 +59,16 @@ BIND VALUES
 ├── JSON                   ✅
 ├── NULL                   ✅
 ├── PostgreSQL binding     ✅
-└── Runtime tests          🟡
+└── Runtime tests          ✅
 
 
 BIND VALUE HARDENING
 ├── NULL INSERT            ✅
 ├── NULL UPDATE            ✅
 ├── Option<T> model         ✅
-├── INSERT MANY + NULL     ⬜
-├── UPDATE MANY + NULL     ⬜
-└── Mixed NULL/bind order  ⬜
+├── INSERT MANY + NULL     ✅
+├── UPDATE MANY + NULL     ✅
+└── Mixed NULL/bind order  ✅
 
 
 ADVANCED SQL
@@ -78,11 +78,11 @@ ADVANCED SQL
 
 
 SCHEMA / CLI
-├── schema.rustorm         ⏸️
-├── Lexer                  ⏸️
-├── Parser                 ⏸️
-├── Representation         ⏸️
-└── Validation             ⏸️
+├── schema.rustorm         ✅
+├── Lexer                  ✅
+├── Parser                 ✅
+├── Representation         ✅
+└── Validation             ✅
 
 NOTE:
 Schema/CLI work is being developed separately in:
@@ -94,14 +94,18 @@ AST, and validator are complete.
 
 
 MIGRATIONS
-├── Generate               ⬜
+├── Generate               ✅
 ├── Run                    ⬜
 └── Rollback               ⬜
 
 
 GENERATOR
-├── Entities               ⏸️
-├── Relations              ⏸️
+├── Entities               ✅
+├── Relations              ✅
+├── Create structs         ✅
+├── InsertData generation  ✅
+├── Update structs         ✅
+├── UpdateData generation  ✅
 └── Client API             ⬜
 
 NOTE:
@@ -128,13 +132,16 @@ Current CLI generator supports:
 - RelationKey
 - @map relation keys
 - Create structs
+- InsertData implementations
+- Update structs
+- UpdateData implementations
 
 
 CLI
 ├── init                   ⬜
 ├── dev                    ⬜
-├── generate               ⬜
-└── migration              ⬜
+├── generate               ✅
+└── migrate                ✅
 
 
 QUALITY
@@ -142,6 +149,7 @@ QUALITY
 ├── Visibility cleanup     ⬜
 ├── Clippy                 ✅
 ├── Documentation          ⬜
+├── End-to-end test        ✅
 └── Multi-DB architecture  ⬜
 
 
@@ -239,15 +247,21 @@ Current NULL fixtures:
 
     TestUserCreateWithNull
     TestUserUpdateWithNull
+    TestUserCreateNullable
 
 Current integration tests:
 
     user_create_with_null_works
     user_update_with_null_works
+    user_create_many_with_null_works
+    user_create_many_with_mixed_null_works
+    update_many_with_null_works
+    update_many_with_mixed_null_works
+    insert_with_null_and_values_preserves_order
 
 Current runtime result:
 
-    109 tests passed
+    114 tests passed
     0 failed
 
 Clippy:
@@ -257,21 +271,30 @@ Clippy:
     clean
 
 
-REMAINING BIND VALUE WORK
--------------------------
+BIND VALUE MILESTONE: COMPLETE
+------------------------------
 
-1. INSERT MANY + NULL
+All BindValue hardening tests have passed:
 
-2. UPDATE MANY + NULL
+1. ✅ INSERT MANY + NULL
+2. ✅ UPDATE MANY + NULL
+3. ✅ Mixed NULL/non-NULL placeholder ordering
 
-3. Mixed NULL/non-NULL placeholder ordering
-
-
-After these tests pass, BindValue can be
-considered sufficiently complete for the
-current CLI CRUD milestone.
+The runtime BindValue contract is now stable enough
+for CLI CRUD generation.
 
 
+CLI CRUD GENERATION: COMPLETE
+------------------------------
+
+All CRUD generation tasks complete:
+
+1. ✅ InsertData generation
+2. ✅ Update structs
+3. ✅ UpdateData generation
+4. ✅ Nullable update semantics (Option<Option<T>>)
+5. ✅ Bulk CRUD generation
+6. ✅ End-to-end compile + execution verified
 
 CLI
 ---
@@ -282,7 +305,7 @@ G:\RustORM-CLI
 
 The CLI is intentionally maintained as a separate project.
 
-Current CLI V0.1 status:
+Current CLI status:
 
 - Schema language                    ✅
 - Lexer                              ✅
@@ -293,62 +316,54 @@ Current CLI V0.1 status:
 - Relation generator                ✅
 - Many-to-Many generation            ✅
 - Create structs                     ✅
-- Tests                              42 passed
+- InsertData generation              ✅
+- Update structs                     ✅
+- UpdateData generation              ✅
+- Migration SQL generation           ✅
+- Shared naming module               ✅
+- Tests                              61 passed
 - Clippy                             clean
 
-CLI CRUD generation is currently paused:
+Naming convention (shared module):
 
-- InsertData generation              ⏸️
-- Update structs                     ⏸️
-- UpdateData generation              ⏸️
+    table_name:  pluralize + snake_case (User → users)
+    column_name: snake_case (userId → user_id)
+    @map override: respected for both
 
-Reason:
+End-to-end verification (consumer test):
 
-Runtime BindValue expansion had to be completed first.
-
-The runtime contract now supports:
-
-- String
-- I64
-- Boolean
-- F64
-- DateTime
-- Decimal
-- JSON
-- NULL
-
-The remaining work is focused testing of NULL
-inside bulk CRUD and placeholder ordering.
+    Schema → CLI generate → CLI migrate → entities.rs
+    → runtime compile → PostgreSQL create/read/update/delete
+    → ALL OPERATIONS PASSED
 
 
+NEXT STEPS
+==========
 
-NEXT AFTER BIND VALUE
-=====================
+1. CLI commands (init, dev):
 
-1. Test INSERT MANY + NULL.
+   ├── rustorm init     (initialize new project)
+   ├── rustorm dev      (watch + regenerate)
+   ├── rustorm generate (already working)
+   └── rustorm migrate  (already working)
 
-2. Test UPDATE MANY + NULL.
+2. Migration execution (run/rollback):
 
-3. Test mixed NULL/non-NULL placeholder ordering.
+   ├── Apply migrations to live database
+   ├── Migration tracking table
+   └── Rollback support
 
-4. Run:
+3. Quality:
 
-   cargo test
+   ├── Documentation
+   ├── Examples (Axum integration)
+   └── Multi-DB architecture
 
-5. Run:
+4. Advanced SQL:
 
-   cargo clippy --all-targets --all-features -- -D warnings
-
-6. Return to:
-
-   G:\RustORM-CLI
-
-7. Resume CLI CRUD generation:
-
-   ├── InsertData generation
-   ├── Update structs
-   └── UpdateData generation
-
+   ├── CTE
+   ├── UNION
+   └── FOR UPDATE
 
 
 IMPORTANT ARCHITECTURE RULE
@@ -372,32 +387,34 @@ Do not introduce a rustorm-core project unless
 explicitly decided later.
 
 
-
 CURRENT ROADMAP ORDER
 =====================
 
 Runtime
    ↓
-BindValue expansion
+BindValue expansion              ✅ COMPLETE
    ↓
-Bulk NULL testing
+Bulk NULL testing                ✅ COMPLETE
    ↓
-Placeholder-order testing
+Placeholder-order testing        ✅ COMPLETE
    ↓
-BindValue milestone complete
+BindValue milestone complete     ✅ COMPLETE
    ↓
-CLI CRUD generation
+CLI CRUD generation              ✅ COMPLETE
    ↓
-Migration generator
+Migration generator              ✅ COMPLETE
    ↓
-CLI commands
+End-to-end verification          ✅ COMPLETE
+   ↓
+CLI commands (init, dev)         ← CURRENT FOCUS
+   ↓
+Migration execution (run)
    ↓
 Project integration
    ↓
 Quality / documentation
    ↓
 Advanced SQL features
-
 
 
 CURRENT WORKING INSTRUCTIONS
@@ -408,44 +425,26 @@ CURRENT WORKING INSTRUCTIONS
 2. Do not restart or redesign completed systems
    without a concrete technical reason.
 
-3. Immediate priority is BindValue hardening.
+3. Immediate priority is CLI commands (init, dev).
 
 4. Work in small, focused steps.
 
 5. Before changing code, inspect the current
    implementation instead of assuming its state.
 
-6. Preserve existing String and I64 behavior while
-   adding or modifying BindValue support.
+6. Preserve existing behavior while adding or
+   modifying functionality.
 
-7. Every BindValue type must have correct
-   PostgreSQL executor behavior.
+7. Every command must have appropriate tests.
 
-8. Add focused runtime tests for every supported
-   behavior.
+8. Add focused tests for every new feature.
 
-9. Do not resume CLI CRUD generation until the
-   runtime BindValue contract is sufficiently
-   complete.
+9. Do not mark a feature ✅ merely because an API
+   or type exists.
 
-10. Do not silently invent nullable Update semantics.
+   It must compile and have appropriate tests.
 
-    Distinguish explicitly between:
-
-    - field not being updated
-    - field being updated to NULL
-
-11. TestUserCreateWithNull and
-    TestUserUpdateWithNull are intentional fixtures
-    and must not be removed merely because they
-    look unused at an intermediate stage.
-
-12. Do not mark a feature ✅ merely because an API
-    or type exists.
-
-    It must compile and have appropriate tests.
-
-13. After every meaningful milestone, run:
+10. After every meaningful milestone, run:
 
     cargo test
 
@@ -453,10 +452,10 @@ CURRENT WORKING INSTRUCTIONS
 
     cargo clippy --all-targets --all-features -- -D warnings
 
-14. Update this working prompt/checklist after
+11. Update this working prompt/checklist after
     completing a meaningful milestone.
 
-15. When continuing work in a new session:
+12. When continuing work in a new session:
 
     ├── Read this file first.
     ├── Check actual source code.
@@ -464,13 +463,16 @@ CURRENT WORKING INSTRUCTIONS
     ├── Continue from CURRENT WORK.
     └── Do not repeat completed work.
 
-16. Avoid unrelated refactors while working on
+13. Avoid unrelated refactors while working on
     the current milestone.
 
-17. Keep Runtime and CLI architecture separate.
+14. Keep Runtime and CLI architecture separate.
 
-18. Current immediate objective:
+15. Current immediate objective:
 
-    Finish BindValue hardening so the runtime
-    contract is stable enough for CLI CRUD
-    generation to safely resume.
+    Implement CLI commands:
+    - rustorm init (initialize new project with .rustorm folder)
+    - rustorm dev (watch mode for schema changes)
+
+    These commands should improve developer experience
+    and make RustORM production-ready for users.

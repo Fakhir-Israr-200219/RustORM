@@ -12,6 +12,21 @@ pub struct TestUserCreate {
 }
 pub struct TestUserCreateWithNull;
 
+pub struct TestUserCreateNullable {
+    pub name: Option<String>,
+}
+impl InsertData<TestUser> for TestUserCreateNullable {
+    fn columns(&self) -> &'static [&'static str] {
+        &["name"]
+    }
+
+    fn values(&self) -> Vec<BindValue> {
+        vec![match &self.name {
+            Some(name) => BindValue::String(name.clone()),
+            None => BindValue::Null,
+        }]
+    }
+}
 impl InsertData<TestUser> for TestUserCreateWithNull {
     fn columns(&self) -> &'static [&'static str] {
         &["name"]

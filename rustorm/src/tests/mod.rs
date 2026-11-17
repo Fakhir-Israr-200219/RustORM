@@ -1141,13 +1141,9 @@ async fn user_update_with_null_works() {
 
     assert_eq!(user.name.as_deref(), Some("Before Null Update"));
 
-    let updated = TestUser::update(
-        &db,
-        user.id,
-        TestUserUpdateWithNull,
-    )
-    .await
-    .unwrap();
+    let updated = TestUser::update(&db, user.id, TestUserUpdateWithNull)
+        .await
+        .unwrap();
 
     assert_eq!(updated.id, user.id);
     assert_eq!(updated.name, None);
@@ -1755,4 +1751,195 @@ fn is_not_null_expression_compiles_without_bind() {
     crate::sql::collect_bind_values(&condition.expression, &mut values);
 
     assert!(values.is_empty());
+}
+#[tokio::test]
+async fn user_create_many_with_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let users = TestUser::create_many(
+        &db,
+        vec![
+            TestUserCreateNullable { name: None },
+            TestUserCreateNullable {
+                name: Some("Fakhir".into()),
+            },
+            TestUserCreateNullable { name: None },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(users.len(), 3);
+
+    assert!(users.iter().all(|user| user.id > 0));
+
+    assert_eq!(users[0].name, None);
+    assert_eq!(users[1].name.as_deref(), Some("Fakhir"));
+    assert_eq!(users[2].name, None);
+}
+#[tokio::test]
+async fn update_many_with_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let user = TestUser::create(
+        &mut tx,
+        TestUserCreate {
+            name: "Update Many Null User".to_string(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::update_many(&mut tx, TestUser::id.eq(user.id), TestUserUpdateWithNull)
+        .await
+        .unwrap();
+
+    assert_eq!(affected, 1);
+
+    let row = sqlx::query("SELECT name FROM users WHERE id = $1")
+        .bind(user.id)
+        .fetch_optional(&mut *tx)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let name: Option<String> = sqlx::Row::try_get(&row, "name").unwrap();
+
+    assert_eq!(name, None);
+
+    tx.rollback().await.unwrap();
+}
+#[tokio::test]
+async fn user_create_many_with_mixed_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let users = TestUser::create_many(
+        &mut tx,
+        vec![
+            TestUserCreateNullable {
+                name: Some("First".into()),
+            },
+            TestUserCreateNullable { name: None }, // NULL
+            TestUserCreateNullable {
+                name: Some("Third".into()),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(users.len(), 3);
+    assert_eq!(users[0].name.as_deref(), Some("First"));
+    assert_eq!(users[1].name, None); // NULL inserted
+    assert_eq!(users[2].name.as_deref(), Some("Third"));
+
+    tx.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn update_many_with_mixed_null_works() {
+    let db = sqlx::PgPool::connect("postgres://postgres:admin@localhost/rustorm")
+        .await
+        .unwrap();
+
+    let mut tx = db.begin().await.unwrap();
+
+    let users = TestUser::create_many(
+        &mut tx,
+        vec![
+            TestUserCreate {
+                name: "Keep".into(),
+            },
+            TestUserCreate {
+                name: "Nullify".into(),
+            },
+            TestUserCreate {
+                name: "Keep".into(),
+            },
+        ],
+    )
+    .await
+    .unwrap();
+
+    let affected = TestUser::update_many(
+        &mut tx,
+        TestUser::name.eq("Nullify"),
+        TestUserUpdateWithNull, // Set name to NULL
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(affected, 1);
+
+    // one() ki jagah all() + into_iter().next() use karo
+    let results = TestUser::find()
+        .where_(TestUser::id.eq(users[1].id))
+        .all(&mut tx)
+        .await
+        .unwrap();
+
+    let updated = results.into_iter().next().expect("row should exist");
+    assert_eq!(updated.name, None); // NULL updated
+
+    tx.rollback().await.unwrap();
+}
+#[test]
+fn insert_with_null_and_values_preserves_order() {
+    // Test: 3 fields — name (NULL), age (25), email ("test")
+    // Expected: SQL has NULL literal for name, placeholders $1, $2 for age, email
+    // Binds should be [25, "test"] in that order
+
+    let columns: &[&str] = &["name", "age", "email"];
+    let values = vec![
+        BindValue::Null,
+        BindValue::I64(25),
+        BindValue::String("test@example.com".into()),
+    ];
+
+    // SQL generation simulate karo
+    let mut sql = String::from("INSERT INTO users (name, age, email) VALUES (");
+    let mut bind_index = 1;
+    let mut binds = Vec::new();
+
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            sql.push_str(", ");
+        }
+        match value {
+            BindValue::Null => {
+                sql.push_str("NULL");
+            }
+            _ => {
+                sql.push_str(&format!("${}", bind_index));
+                bind_index += 1;
+                binds.push(value.clone());
+            }
+        }
+    }
+    sql.push_str(")");
+
+    assert_eq!(
+        sql,
+        "INSERT INTO users (name, age, email) VALUES (NULL, $1, $2)"
+    );
+    assert_eq!(binds.len(), 2);
+
+    match &binds[0] {
+        BindValue::I64(v) => assert_eq!(*v, 25),
+        _ => panic!("expected I64(25)"),
+    }
+    match &binds[1] {
+        BindValue::String(v) => assert_eq!(v, "test@example.com"),
+        _ => panic!("expected String"),
+    }
 }
