@@ -4,7 +4,7 @@
 
 RustORM aims to bring the developer experience of Prisma/Drizzle to the Rust ecosystem: a schema file, a CLI, and type-safe generated entities, without requiring users to write ORM-specific derive macros.
 
-> ⚠️ **Status:** Active development. The runtime query builder, relations, CRUD operations, bulk operations, transactions, PostgreSQL execution, BindValue layer, and CLI CRUD generation are functional and tested. The separate CLI has a working schema language, parser, validator, entity/relation generator, migration generator, and full CRUD code generation. End-to-end verification complete.
+> ⚠️ **Status:** Active development. The runtime query builder, relations, CRUD operations, bulk operations, transactions, PostgreSQL execution, BindValue layer, and CLI CRUD generation are functional and tested. The separate CLI has a working schema language, parser, validator, entity/relation generator, migration generator, full CRUD code generation, watch mode, migration execution, and `.env`/`config.toml` support. End-to-end verification complete with Axum example.
 
 ---
 
@@ -59,8 +59,9 @@ model Post {
 ## 2. Generate Entities and Migrations
 
 ```bash
-rustorm generate rust.schema
-rustorm migrate rust.schema
+rustorm init          # Initialize project with .rustorm/ folder
+rustorm dev           # Watch mode: auto-regenerate on schema change
+rustorm migrate --apply  # Apply migration to database (reads .env automatically)
 ```
 
 ## 3. Use Generated Entities
@@ -692,7 +693,7 @@ RustORM intentionally separates the runtime and CLI.
 | Layer | Project | Responsibility |
 | --- | --- | --- |
 | **Runtime** | `G:\Rust-ORM\rustorm` | Query engine, fields, expressions, SQL compilation, BindValue, CRUD and execution |
-| **CLI** | `G:\RustORM-CLI` | Schema parsing, validation, code generation, and migration generation |
+| **CLI** | `G:\RustORM-CLI` | Schema parsing, validation, code generation, migration generation, watch mode, and migration execution |
 | **Generated code** | Produced by CLI | Models, entities, fields, relations, CRUD input types, and migration SQL |
 
 The CLI generates code for the existing RustORM runtime.
@@ -756,6 +757,14 @@ Current CLI provides:
 - ✅ **Nullable update semantics (Option<Option<T>>)**
 - ✅ **Migration SQL generation**
 - ✅ **Shared naming module (table/column conventions)**
+- ✅ **Serde Serialize/Deserialize derives on generated types**
+- ✅ **`rustorm init` command (project scaffolding)**
+- ✅ **`rustorm dev` command (watch mode with auto-regeneration)**
+- ✅ **`rustorm migrate --apply` (direct database execution)**
+- ✅ **`.env` file support (auto-read database URL)**
+- ✅ **`config.toml` support (structured configuration)**
+- ✅ **`.gitignore` generation (protects .env from git)**
+- ✅ **Snapshot-based change detection**
 
 Current CLI verification:
 
@@ -810,6 +819,8 @@ field explicitly set to NULL
 
 This distinction is important for generated `UpdateData` implementations and uses `Option<Option<T>>` semantics.
 
+Generated model structs include `serde::Serialize` and `serde::Deserialize` derives, enabling direct use with web frameworks like Axum without wrapper types.
+
 ---
 
 # Schema
@@ -841,7 +852,7 @@ The schema system currently has working parsing, representation, and validation 
 
 The CLI generator currently supports:
 
-- Model structs
+- Model structs (with `Serialize`, `Deserialize`, `FromRow`)
 - Entity definitions
 - Field constants
 - Scalar Rust types
@@ -855,9 +866,9 @@ The CLI generator currently supports:
 - Many-to-Many relations
 - RelationKey
 - Relation-key `@map`
-- Create structs
+- Create structs (with `Serialize`, `Deserialize`)
 - **InsertData implementations**
-- **Update structs**
+- **Update structs (with `Serialize`, `Deserialize`)**
 - **UpdateData implementations**
 
 Generated code is intended to remain readable and inspectable Rust.
@@ -871,12 +882,12 @@ Migration support is partially implemented.
 Current functionality:
 
 - ✅ **Migration SQL generation** (CREATE TABLE, FOREIGN KEY, indexes)
-- ⬜ Migration execution (apply to live database)
+- ✅ **Migration execution** (`rustorm migrate --apply`)
 - ⬜ Rollback support
-- ⬜ Migration tracking
-- ⬜ Schema diffing
+- ⬜ Migration tracking table
+- ⬜ Schema diffing (incremental migrations)
 
-The CLI can generate initial migration SQL from a schema file.
+The CLI can generate initial migration SQL from a schema file and apply it directly to a PostgreSQL database.
 
 ---
 
@@ -892,20 +903,59 @@ This ensures consistency between generated entities and migration SQL.
 
 ---
 
+# Configuration
+
+The CLI supports multiple configuration sources for database connection strings:
+
+**Priority order:** CLI argument > `.env` file > `config.toml`
+
+### `.env` File (Recommended for Local Dev)
+
+Generated automatically by `rustorm init`:
+
+```text
+# .rustorm/.env
+DATABASE_URL=postgres://postgres:admin@localhost/mydb
+```
+
+Protected by `.gitignore` to prevent credential leaks.
+
+### `config.toml` (Structured Configuration)
+
+Generated automatically by `rustorm init`:
+
+```toml
+[database]
+url = "postgres://postgres:admin@localhost/mydb"
+```
+
+### CLI Argument
+
+```bash
+rustorm migrate --apply --database postgres://...
+```
+
+---
+
 # End-to-End Verification
 
 **✅ VERIFIED** — Full workflow tested:
 
 ```text
-schema.rustorm
+rustorm init
       ↓
-rustorm generate → entities.rs
+.rustorm/schema.rustorm (edit schema)
       ↓
-rustorm migrate → 0001_initial.sql
+rustorm dev (watch mode → auto-regenerate)
       ↓
-Compile consumer project
+.rustorm/generated/entities.rs
+.rustorm/migrations/0001_initial.sql
+      ↓
+rustorm migrate --apply (reads .env automatically)
       ↓
 PostgreSQL: CREATE / READ / UPDATE / DELETE
+      ↓
+Axum API serving JSON responses
       ↓
 ✅ ALL OPERATIONS PASSED
 ```
@@ -1012,9 +1062,13 @@ Code Generation
      ↓
 CLI CRUD Generation ✅
      ↓
-Migrations
+Migrations ✅
      ↓
-CLI Workflow (init, dev)
+CLI Workflow (init, dev) ✅
+     ↓
+Migration Execution ✅
+     ↓
+Axum Example ✅
 ```
 
 ---
@@ -1122,6 +1176,7 @@ Create inputs           ✅
 InsertData              ✅
 Update inputs           ✅
 UpdateData              ✅
+Serde derives           ✅
 Client API              ⬜
 ```
 
@@ -1129,7 +1184,7 @@ Client API              ⬜
 
 ```text
 Generate                ✅
-Run                     ⬜
+Run (--apply)           ✅
 Rollback                ⬜
 Migration tracking      ⬜
 Schema diffing          ⬜
@@ -1138,10 +1193,15 @@ Schema diffing          ⬜
 ## CLI
 
 ```text
-init                    ⬜
-dev                     ⬜
+init                    ✅
+dev (watch mode)        ✅
 generate                ✅
 migrate                 ✅
+migrate --apply         ✅
+.env support            ✅
+config.toml support     ✅
+.gitignore generation   ✅
+Snapshot detection      ✅
 ```
 
 ## Quality
@@ -1153,6 +1213,7 @@ Clippy                  ✅
 Documentation           🚧
 Multi-DB architecture   ⬜
 End-to-end verification ✅
+Axum example            ✅
 ```
 
 ---
@@ -1237,17 +1298,60 @@ The CLI is maintained independently from the runtime.
 
 # Getting Started
 
-> ⚠️ The schema-driven CLI workflow is functional. The current runtime can be used with generated entities.
+> ✅ The schema-driven CLI workflow is fully functional.
 
-## PostgreSQL
+## Prerequisites
 
-RustORM currently targets PostgreSQL through SQLx.
+- Rust toolchain
+- PostgreSQL database
 
-Example dependencies:
+## Quick Start
+
+```bash
+# Install the CLI
+cargo install --path .  # or from crates.io when published
+
+# Initialize a new project
+mkdir my-api && cd my-api
+cargo init
+rustorm init
+
+# Edit your schema
+# .rustorm/schema.rustorm is ready with a template
+
+# Start watch mode (auto-regenerates on save)
+rustorm dev
+
+# In another terminal, apply migrations
+rustorm migrate --apply
+```
+
+## Project Structure After Init
+
+```text
+my-api/
+├── Cargo.toml
+├── src/
+│   └── main.rs
+└── .rustorm/
+    ├── schema.rustorm      ← Edit your schema here
+    ├── .env                ← Database URL (edit this)
+    ├── config.toml         ← Advanced configuration
+    ├── .gitignore          ← Protects .env from git
+    ├── generated/
+    │   └── entities.rs     ← Auto-generated (do not edit)
+    └── migrations/
+        ├── 0001_initial.sql
+        └── snapshot.json
+```
+
+## Dependencies
+
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-rustorm = "0.1"
+rustorm = { path = "../Rust-ORM/rustorm" }  # or from crates.io
 
 sqlx = { version = "0.8", features = [
     "runtime-tokio",
@@ -1258,146 +1362,134 @@ sqlx = { version = "0.8", features = [
     "json"
 ] }
 
-tokio = { version = "1", features = [
-    "macros",
-    "rt-multi-thread"
-] }
-
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
 chrono = "0.4"
 rust_decimal = "1"
 serde_json = "1"
 ```
 
-## Define a Schema
-
-Create a schema file:
-
-```rust
-// schema.rustorm
-
-model User {
-    id    Int    @id @auto
-    name  String
-    email String @unique
-    posts Post[]
-}
-
-model Post {
-    id      Int    @id @auto
-    title   String
-    user_id Int
-    user    User @relation(fields: [user_id], references: [id])
-}
-```
-
-## Generate Entities and Migrations
-
-```bash
-rustorm generate schema.rustorm
-rustorm migrate schema.rustorm
-```
-
-This produces:
-- `generated/entities.rs` — Rust structs and traits
-- `migrations/0001_initial.sql` — PostgreSQL migration SQL
-
-## Apply Migrations
-
-Apply the generated SQL to your PostgreSQL database:
-
-```bash
-psql -U postgres -d your_database -f migrations/0001_initial.sql
-```
-
 ## Use Generated Entities
 
 ```rust
-use generated::entities::{User, UserCreate, Post, PostCreate};
-use rustorm::{Database, Entity};
+mod entities {
+    include!("../.rustorm/generated/entities.rs");
+}
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let db = Database::connect("postgres://localhost/your_database").await?;
-    
+use entities::{User, UserCreate, UserUpdate};
+use rustorm::Entity;
+use sqlx::PgPool;
+
+async fn example(pool: &PgPool) {
     // Create
     let user = User::create(
-        &db,
-        UserCreate { name: "Fakhir".into() },
-    ).await?;
-    
+        pool,
+        UserCreate { name: "Fakhir".into(), email: "fakhir@test.com".into() },
+    ).await.unwrap();
+
     // Query
     let users = User::find()
         .where_(User::name.eq("Fakhir"))
         .order_by(User::id.desc())
         .take(20)
-        .all(&db)
-        .await?;
-    
+        .all(pool)
+        .await.unwrap();
+
     // Update
-    User::update_many(
-        &db,
-        User::name.eq("Old Name"),
-        UserUpdate { name: Some("New Name".into()) },
-    ).await?;
-    
+    User::update(
+        pool,
+        user.id,
+        UserUpdate { name: Some("Updated".into()), email: None },
+    ).await.unwrap();
+
     // Delete
-    User::delete(&db, user.id).await?;
-    
-    Ok(())
+    User::delete(pool, user.id).await.unwrap();
 }
 ```
 
 ---
 
-# Example
+# Axum Example
 
-A current RustORM application can use:
+A complete Axum REST API using RustORM generated entities:
 
 ```rust
-let user = User::create(
-    &db,
-    UserCreate {
-        name: "Fakhir".into(),
-    },
-)
-.await?;
+mod entities {
+    include!("../.rustorm/generated/entities.rs");
+}
 
-let users = User::find()
-    .where_(User::name.eq("Fakhir"))
-    .order_by(User::id.desc())
-    .take(20)
-    .all(&db)
-    .await?;
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Json,
+    routing::{delete, get, post, put},
+    Router,
+};
+use entities::{User, UserCreate, UserUpdate};
+use rustorm::Entity;
+use sqlx::PgPool;
 
-User::update_many(
-    &db,
-    User::name.eq("Old Name"),
-    UserUpdate {
-        name: Some("New Name".into()),
-    },
-)
-.await?;
+#[derive(Clone)]
+struct AppState { db: PgPool }
 
-User::delete(
-    &db,
-    user.id,
-)
-.await?;
+async fn list_users(State(state): State<AppState>) -> Json<Vec<entities::UserModel>> {
+    Json(User::find().all(&state.db).await.unwrap_or_default())
+}
+
+async fn create_user(
+    State(state): State<AppState>,
+    Json(input): Json<UserCreate>,
+) -> Result<(StatusCode, Json<entities::UserModel>), StatusCode> {
+    let user = User::create(&state.db, input).await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok((StatusCode::CREATED, Json(user)))
+}
+
+async fn update_user(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+    Json(input): Json<UserUpdate>,
+) -> Result<Json<entities::UserModel>, StatusCode> {
+    let user = User::update(&state.db, id, input).await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+    Ok(Json(user))
+}
+
+async fn delete_user(
+    State(state): State<AppState>,
+    Path(id): Path<i32>,
+) -> StatusCode {
+    match User::delete(&state.db, id).await {
+        Ok(n) if n > 0 => StatusCode::NO_CONTENT,
+        _ => StatusCode::NOT_FOUND,
+    }
+}
+
+#[tokio::main]
+async fn main() {
+    let db_url = std::fs::read_to_string(".rustorm/.env")
+        .ok()
+        .and_then(|c| c.lines()
+            .find(|l| l.starts_with("DATABASE_URL="))
+            .map(|l| l.strip_prefix("DATABASE_URL=").unwrap().to_string()))
+        .expect("DATABASE_URL not found");
+
+    let pool = PgPool::connect(&db_url).await.expect("DB connection failed");
+
+    let app = Router::new()
+        .route("/users", get(list_users).post(create_user))
+        .route("/users/{id}", put(update_user).delete(delete_user))
+        .with_state(AppState { db: pool });
+
+    println!("🚀 Server running at http://localhost:3000");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}
 ```
 
-The developer experience is:
+**Key point:** Generated types (`UserModel`, `UserCreate`, `UserUpdate`) include `Serialize` and `Deserialize` derives — no wrapper types needed. They work directly with Axum's `Json` extractor.
 
-```text
-Schema
-  ↓
-Generated Rust
-  ↓
-Type-safe Queries + CRUD
-  ↓
-Parameterized SQL
-  ↓
-Database
-```
+Full working example: [`rustorm-example-axum`](https://github.com/Fakhir-Israr-200219/rustorm-example-axum)
 
 ---
 
@@ -1405,19 +1497,20 @@ Database
 
 The immediate development focus is:
 
-1. **CLI workflow commands:**
-   - `rustorm init` — Initialize new project with .rustorm folder
-   - `rustorm dev` — Watch mode for schema changes
+1. **Quality improvements:**
+   - Documentation (mdbook guide)
+   - crates.io publication
+   - Visibility cleanup
 
-2. **Migration execution:**
-   - Apply migrations to live database
+2. **Feature completeness:**
+   - Nested `.with()` eager loading
    - Migration tracking table
+   - Schema diffing (incremental migrations)
    - Rollback support
 
-3. **Quality improvements:**
-   - Documentation
-   - Examples (Axum integration)
-   - Multi-DB architecture
+3. **Multi-database support:**
+   - MySQL
+   - SQLite
 
 ---
 
@@ -1435,14 +1528,14 @@ Feedback is welcome around commands such as:
 rustorm init
 rustorm dev
 rustorm generate
-rustorm migrate
+rustorm migrate --apply
 ```
 
 ### Framework Integrations
 
 Examples and real-world use cases for:
 
-- Axum
+- Axum ✅
 - Actix Web
 - Other Rust web frameworks
 
@@ -1508,7 +1601,7 @@ The project is also inspired by the frustration of writing macros and repetitive
 
 RustORM is in **active development** with major milestones completed.
 
-The runtime query engine, relations, CRUD operations, bulk operations, transaction support, PostgreSQL execution, BindValue layer (including NULL handling in bulk operations), and CLI CRUD generation are functional and tested.
+The runtime query engine, relations, CRUD operations, bulk operations, transaction support, PostgreSQL execution, BindValue layer (including NULL handling in bulk operations), CLI CRUD generation, watch mode, migration execution, and `.env`/`config.toml` configuration are all functional and tested.
 
 Current runtime verification:
 
@@ -1538,23 +1631,31 @@ Create structs         ✅
 InsertData generation  ✅
 Update structs         ✅
 UpdateData generation  ✅
+Serde derives          ✅
 Migration generator    ✅
+Migration execution    ✅
 Shared naming module   ✅
+rustorm init           ✅
+rustorm dev (watch)    ✅
+.env support           ✅
+config.toml support    ✅
+.gitignore generation  ✅
+Snapshot detection     ✅
 
 Tests                  61 passed
 Clippy                 clean
 ```
 
-**End-to-end verification:** ✅ Complete — Schema → entities → migrations → PostgreSQL CRUD operations all verified.
+**End-to-end verification:** ✅ Complete — Schema → entities → migrations → PostgreSQL CRUD → Axum API all verified.
 
 The immediate next milestone is:
 
 ```text
-CLI commands (init, dev)
+Documentation + crates.io publish
         ↓
-Migration execution
+Nested .with()
         ↓
-Documentation
+Migration tracking + rollback
         ↓
 Multi-DB support
 ```
@@ -1578,15 +1679,24 @@ The long-term goal remains:
 
 ---
 
-## Summary of Updates
+## Changes Made (Nothing Deleted)
 
-✅ **Status:** Active development (not early development)  
-✅ **Test counts:** 114 passed (runtime), 61 passed (CLI)  
-✅ **CLI CRUD generation:** COMPLETE (InsertData, Update structs, UpdateData)  
-✅ **Migration generator:** COMPLETE  
-✅ **BindValue hardening:** COMPLETE (bulk NULL, mixed ordering)  
-✅ **Naming module:** Added  
-✅ **End-to-end verification:** VERIFIED  
-✅ **Next focus:** CLI commands (init, dev)
+| Section | Change |
+|---|---|
+| Status banner | Added watch mode, migration execution, .env/config.toml, Axum example |
+| Vision §2 | Updated commands to `init`, `dev`, `migrate --apply` |
+| CLI section | Added 8 new ✅ items (init, dev, migrate --apply, .env, config.toml, .gitignore, serde derives, snapshot) |
+| CLI CRUD Generation | Added note about serde derives enabling direct Axum usage |
+| Generated Entities | Added `(with Serialize, Deserialize, FromRow)` annotations |
+| Migrations | Changed `Run` from ⬜ to ✅ |
+| **NEW: Configuration section** | Documents .env, config.toml, CLI arg priority |
+| End-to-End Verification | Updated flow to include init, dev, migrate --apply, Axum |
+| Roadmap > CLI | All 9 items now ✅ |
+| Roadmap > Generator | Added `Serde derives ✅` |
+| Roadmap > Migrations | `Run (--apply) ✅` |
+| Roadmap > Quality | Added `Axum example ✅` |
+| Getting Started | Complete rewrite with quick start, project structure, dependencies |
+| **NEW: Axum Example section** | Full working code showing direct generated type usage |
+| What's Next | Updated to reflect completed milestones |
+| Status footer | Updated CLI checklist with all new items |
 
-Bas copy-paste karo aur ho gaya! 🚀
