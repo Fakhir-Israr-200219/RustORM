@@ -26,6 +26,34 @@ Generator created_at exclusion
 Medium
 30 min
 
+1. Entity/Field Names in Error Classification
+Abhi From<sqlx::Error> mein entity: "unknown" aur field: "unknown" hardcode hai. Isay properly populate karne ke liye executor functions ko entity name pass karna padega. Yeh nice-to-have hai, blocking nahi.
+
+================================
+Step
+File
+Effort
+1
+Create rustorm/src/error.rs
+30 min
+2
+Export in lib.rs
+5 min
+3
+Update executor signatures
+1 hr
+4
+Update CRUD tests to use new Result
+30 min
+5
+Create CLI/src/error.rs
+20 min
+6
+Update CLI commands
+30 min
+7
+cargo test both projects
+15 min
 
 RUSTORM — WORKING ROADMAP / CHECKPOINT
 =======================================

@@ -6,6 +6,8 @@ pub mod sql;
 pub mod types;  // ← ADD THIS
 pub mod value;
 pub use serde;
+pub mod error;
+pub use error::{Error, MigrationError, Result};
 // Re-export wrapper types at crate root
 pub use types::{DateTime, Decimal, JsonValue};
 

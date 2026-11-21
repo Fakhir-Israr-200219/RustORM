@@ -7,7 +7,7 @@ pub trait InsertData<E: Entity> {
     fn values(&self) -> Vec<BindValue>;
 }
 
-pub async fn insert<'c, E, D, A>(db: A, data: D) -> Result<E::Model, sqlx::Error>
+pub async fn insert<'c, E, D, A>(db: A, data: D) -> crate::error::Result<E::Model>
 where
     E: Entity,
     D: InsertData<E>,
@@ -80,9 +80,10 @@ where
         }
     }
 
-    query.fetch_one(&mut *conn).await
+    Ok(query.fetch_one(&mut *conn).await?)
 }
-pub async fn insert_many<'c, E, D, A>(db: A, data: Vec<D>) -> Result<Vec<E::Model>, sqlx::Error>
+
+pub async fn insert_many<'c, E, D, A>(db: A, data: Vec<D>) -> crate::error::Result<Vec<E::Model>>
 where
     E: Entity,
     D: InsertData<E>,
@@ -129,7 +130,7 @@ where
         sql.push(')');
 
         if item.columns().len() != column_count {
-            return Err(sqlx::Error::Protocol(
+            return Err(crate::error::Error::Generation(
                 "All insert_many items must have the same columns".into(),
             ));
         }
@@ -176,8 +177,9 @@ where
         }
     }
 
-    query.fetch_all(&mut *conn).await
+    Ok(query.fetch_all(&mut *conn).await?)
 }
+
 // ==================== UPDATE ====================
 
 pub trait UpdateData<E: Entity> {
@@ -185,7 +187,7 @@ pub trait UpdateData<E: Entity> {
     fn values(&self) -> Vec<BindValue>;
 }
 
-pub async fn update<'c, E, D, A>(db: A, id: i32, data: D) -> Result<E::Model, sqlx::Error>
+pub async fn update<'c, E, D, A>(db: A, id: i32, data: D) -> crate::error::Result<E::Model>
 where
     E: Entity,
     D: UpdateData<E>,
@@ -197,7 +199,7 @@ where
     let values = data.values();
 
     if columns.is_empty() {
-        return Err(sqlx::Error::Protocol(
+        return Err(crate::error::Error::Generation(
             "UPDATE requires at least one field".into(),
         ));
     }
@@ -263,10 +265,10 @@ where
 
     query = query.bind(id);
 
-    query.fetch_one(&mut *conn).await
+    Ok(query.fetch_one(&mut *conn).await?)
 }
 
-pub async fn delete<'c, E, A>(db: A, id: i32) -> Result<u64, sqlx::Error>
+pub async fn delete<'c, E, A>(db: A, id: i32) -> crate::error::Result<u64>
 where
     E: Entity,
     A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
@@ -284,7 +286,7 @@ pub async fn update_many<'c, E, D, A>(
     db: A,
     condition: Condition<E>,
     data: D,
-) -> Result<u64, sqlx::Error>
+) -> crate::error::Result<u64>
 where
     E: Entity,
     D: UpdateData<E>,
@@ -296,7 +298,7 @@ where
     let values = data.values();
 
     if columns.is_empty() {
-        return Err(sqlx::Error::Protocol(
+        return Err(crate::error::Error::Generation(
             "UPDATE requires at least one field".into(),
         ));
     }
@@ -368,7 +370,8 @@ where
 
     Ok(result.rows_affected())
 }
-pub async fn delete_many<'c, E, A>(db: A, condition: Condition<E>) -> Result<u64, sqlx::Error>
+
+pub async fn delete_many<'c, E, A>(db: A, condition: Condition<E>) -> crate::error::Result<u64>
 where
     E: Entity,
     A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
