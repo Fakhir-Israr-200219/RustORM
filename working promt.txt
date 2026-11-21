@@ -1,59 +1,44 @@
-ORM-level error types
-🔴 P2
-2-3 hrs
+🟡 P1
+Cleanup warnings (Runtime clippy)
+30 min
+Quality
+4 locations in builder.rs + tests
+🟡 P1
+Entity/Field names in error classification
+1 hr
+Runtime
+"unknown" → actual names
+🟢 P2
+VS Code Syntax Highlighting
+1-2 days
+DX
+Immediate IDE value
+🟢 P2
 Documentation (mdbook)
-🟡 P2
 5 hrs
+Docs
+User guide
+🟢 P2
 crates.io publish prep
-🟡 P2
 2 hrs
+Release
+After docs ready
+⚪ P3
+VS Code LSP Diagnostics
+3-5 days
+DX
+After syntax highlighting
+⚪ P3
 Rollback support
-🟡 P3
 3 hrs
-M2M routes re-enable
-Bug fix needed
-1-2 hrs
-Cleanup warnings
-Low
-30 min
-Generator @map automation
-High
-1 hr
-Generator #[serde(skip)] automation
-High
-1 hr
-Generator created_at exclusion
-Medium
-30 min
+Migrations
+Nice-to-have
+⚪ P3
+Auto-complete + hover docs
+1 week
+DX
+Polish phase
 
-1. Entity/Field Names in Error Classification
-Abhi From<sqlx::Error> mein entity: "unknown" aur field: "unknown" hardcode hai. Isay properly populate karne ke liye executor functions ko entity name pass karna padega. Yeh nice-to-have hai, blocking nahi.
-
-================================
-Step
-File
-Effort
-1
-Create rustorm/src/error.rs
-30 min
-2
-Export in lib.rs
-5 min
-3
-Update executor signatures
-1 hr
-4
-Update CRUD tests to use new Result
-30 min
-5
-Create CLI/src/error.rs
-20 min
-6
-Update CLI commands
-30 min
-7
-cargo test both projects
-15 min
 
 RUSTORM — WORKING ROADMAP / CHECKPOINT
 =======================================
