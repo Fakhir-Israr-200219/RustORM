@@ -64,7 +64,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(&mut *db).await?;
+        let children = child_query.all_on_connection(db).await?;
 
         let mut grouped: HashMap<i64, Vec<To::Model>> = HashMap::new();
 
@@ -110,7 +110,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(&mut *db).await?;
+        let children = child_query.all_on_connection(db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 
@@ -156,7 +156,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(&mut *db).await?;
+        let children = child_query.all_on_connection(db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 
@@ -268,7 +268,7 @@ where
             .target_query()
             .apply_relation_filter(&self.relation.info(), values);
 
-        let children = child_query.all(&mut *db).await?;
+        let children = child_query.all_on_connection(db).await?;
 
         let mut grouped: HashMap<i64, Arc<To::Model>> = HashMap::new();
 

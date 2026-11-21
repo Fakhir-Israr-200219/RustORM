@@ -1,3 +1,32 @@
+ORM-level error types
+🔴 P2
+2-3 hrs
+Documentation (mdbook)
+🟡 P2
+5 hrs
+crates.io publish prep
+🟡 P2
+2 hrs
+Rollback support
+🟡 P3
+3 hrs
+M2M routes re-enable
+Bug fix needed
+1-2 hrs
+Cleanup warnings
+Low
+30 min
+Generator @map automation
+High
+1 hr
+Generator #[serde(skip)] automation
+High
+1 hr
+Generator created_at exclusion
+Medium
+30 min
+
+
 RUSTORM — WORKING ROADMAP / CHECKPOINT
 =======================================
 

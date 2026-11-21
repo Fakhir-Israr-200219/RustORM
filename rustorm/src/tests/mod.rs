@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use self::models::*;
 use crate::Entity;
+// use crate::Query; <-- unused by the code
 use crate::executor::UpdateData;
 use crate::sql::collect_bind_values;
 use crate::sql::compile_expression;
@@ -1899,7 +1900,7 @@ fn insert_with_null_and_values_preserves_order() {
     // Expected: SQL has NULL literal for name, placeholders $1, $2 for age, email
     // Binds should be [25, "test"] in that order
 
-    let columns: &[&str] = &["name", "age", "email"];
+    let _columns: &[&str] = &["name", "age", "email"];
     let values = vec![
         BindValue::Null,
         BindValue::I64(25),
@@ -1942,4 +1943,59 @@ fn insert_with_null_and_values_preserves_order() {
         BindValue::String(v) => assert_eq!(v, "test@example.com"),
         _ => panic!("expected String"),
     }
+}
+#[tokio::test]
+async fn test_nested_with_loading() {
+    use crate::tests::models::{TestUser, TestPost};
+    use crate::query::builder::Query;
+
+    let db_url = "postgres://postgres:admin@localhost/rustorm";
+
+    let pool = sqlx::PgPool::connect(db_url)
+        .await
+        .expect("Failed to connect to test database");
+
+    // Use UNIQUE high IDs to avoid collision with other tests
+    // DO NOT delete existing data!
+    sqlx::raw_sql(
+        "INSERT INTO users (id, name) VALUES (9001, 'NestedAlice'), (9002, 'NestedBob') ON CONFLICT (id) DO NOTHING;
+         INSERT INTO posts (id, title, user_id) VALUES (9010, 'NestedPostA', 9001), (9011, 'NestedPostB', 9001), (9012, 'NestedPostC', 9002) ON CONFLICT (id) DO NOTHING;
+         INSERT INTO comments (id, body, post_id) VALUES (9100, 'NestedComment1', 9010), (9101, 'NestedComment2', 9010), (9102, 'NestedComment3', 9011) ON CONFLICT (id) DO NOTHING;"
+    )
+    .execute(&pool)
+    .await
+    .expect("Failed to seed nested test data");
+
+    // Query only our isolated test data
+    let users = Query::<TestUser>::new()
+        .where_(TestUser::id.gte(9001))
+        .with_nested(TestUser::posts, |q| {
+            q.with(TestPost::comments)
+        })
+        .all(&pool)
+        .await
+        .expect("Nested with query failed");
+
+    assert_eq!(users.len(), 2, "Should load 2 nested test users");
+
+    let alice = users.iter().find(|u| u.id == 9001).expect("NestedAlice not found");
+    assert_eq!(alice.posts.len(), 2, "NestedAlice should have 2 posts");
+
+    let post_a = alice.posts.iter().find(|p| p.id == 9010).expect("NestedPostA not found");
+    assert_eq!(post_a.comments.len(), 2, "NestedPostA should have 2 comments");
+
+    let bob = users.iter().find(|u| u.id == 9002).expect("NestedBob not found");
+    assert_eq!(bob.posts.len(), 1, "NestedBob should have 1 post");
+
+    // Cleanup ONLY our test data
+    sqlx::raw_sql(
+        "DELETE FROM comments WHERE id >= 9100;
+         DELETE FROM posts WHERE id >= 9010;
+         DELETE FROM users WHERE id >= 9001;"
+    )
+    .execute(&pool)
+    .await
+    .ok();
+
+    println!("✅ Nested .with_nested() verified end-to-end!");
 }

@@ -1,9 +1,13 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use crate::entity::{Column, Entity};
+use sqlx::postgres::PgRow;
+
+use crate::entity::{Column, Entity, RelationKey, RelationLoader};
 use crate::query::condition::Condition;
 use crate::query::expression::{BinaryOperator, Expression};
 use crate::query::join::{Join, JoinTarget, JoinType};
+use crate::query::relation::RelationLoad;
 use crate::query::statement::{OrderBy, OrderDirection, SelectItem, SelectStatement};
 use crate::sql::{collect_bind_values, compile_expression};
 use crate::value::BindValue;
@@ -14,7 +18,10 @@ pub struct RelationNode<Rel, Tail> {
     pub relation: Rel,
     pub tail: Tail,
 }
-
+pub struct NestedRelation<From: Entity, To: Entity, C, SubR> {
+    pub relation: crate::query::relation::Relation<From, To, C>,
+    pub sub_relations: SubR,
+}
 pub struct Query<E, R = NoRelations> {
     pub(crate) statement: SelectStatement<E>,
     pub(crate) relations: R,
@@ -87,6 +94,34 @@ where
             },
             relations: RelationNode {
                 relation,
+                tail: self.relations,
+            },
+            _entity: PhantomData,
+        }
+    }
+    pub fn with_nested<To, C, F, SubR>(
+        self,
+        relation: crate::query::relation::Relation<E, To, C>,
+        configure: F,
+    ) -> Query<E, RelationNode<NestedRelation<E, To, C, SubR>, R>>
+    where
+        To: Entity,
+        F: FnOnce(Query<To, NoRelations>) -> Query<To, SubR>,
+        SubR: crate::query::relation::RelationLoad<To>,
+    {
+        let sub_query = configure(Query::<To>::new());
+
+        Query {
+            statement: {
+                let mut statement = self.statement;
+                statement.relations.push(relation.info());
+                statement
+            },
+            relations: RelationNode {
+                relation: NestedRelation {
+                    relation,
+                    sub_relations: sub_query.relations,
+                },
                 tail: self.relations,
             },
             _entity: PhantomData,
@@ -419,45 +454,37 @@ where
     {
         let mut conn = db.acquire().await?;
 
+        self.all_on_connection(&mut *conn).await
+    }
+
+    pub(crate) async fn all_on_connection(
+        self,
+        conn: &mut sqlx::PgConnection,
+    ) -> Result<Vec<E::Model>, sqlx::Error> {
         let compiled = self.compile();
 
         let mut query = sqlx::query_as::<_, E::Model>(&compiled.sql);
 
         for value in compiled.binds {
             match value {
-                BindValue::String(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::I64(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::Boolean(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::F64(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::DateTime(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::Decimal(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::Json(value) => {
-                    query = query.bind(value);
-                }
-                BindValue::Null => {
-                    // NULL handling will be implemented at the SQL-expression level.
-                }
+                BindValue::String(value) => query = query.bind(value),
+                BindValue::I64(value) => query = query.bind(value),
+                BindValue::Boolean(value) => query = query.bind(value),
+                BindValue::F64(value) => query = query.bind(value),
+                BindValue::DateTime(value) => query = query.bind(value),
+                BindValue::Decimal(value) => query = query.bind(value),
+                BindValue::Json(value) => query = query.bind(value),
+                BindValue::Null => {}
             }
         }
 
         let mut parents = query.fetch_all(&mut *conn).await?;
 
-        self.relations.load(&mut conn, &mut parents).await?;
+        self.relations.load(conn, &mut parents).await?;
 
         Ok(parents)
     }
+
     pub async fn count(self, db: &sqlx::PgPool) -> Result<i64, sqlx::Error> {
         let sql = self.build_count_sql();
 
@@ -540,5 +567,61 @@ where
         }
 
         query.fetch_all(db).await
+    }
+}
+
+impl<From, To, C, SubR, Tail> RelationLoad<From>
+    for RelationNode<NestedRelation<From, To, C, SubR>, Tail>
+where
+    From: Entity,
+    To: Entity,
+    From::Model: RelationKey + RelationLoader<To::Model>,
+    To::Model: RelationKey + for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
+    SubR: RelationLoad<To> + Send + Sync,
+    Tail: RelationLoad<From> + Send + Sync,
+{
+    async fn load(
+        &self,
+        db: &mut sqlx::PgConnection,
+        parents: &mut [From::Model],
+    ) -> Result<(), sqlx::Error> {
+        if parents.is_empty() {
+            return self.tail.load(db, parents).await;
+        }
+
+        // Step 1: Load direct children (same as existing OneToMany logic)
+        let values = self.relation.relation.parent_key_values(parents);
+
+        let child_query = self
+            .relation
+            .relation
+            .target_query()
+            .apply_relation_filter(&self.relation.relation.info(), values);
+
+        let mut children = child_query.all_on_connection(db).await?;
+
+        // Step 2: ★ NEW — Load nested sub-relations on children ★
+        if !children.is_empty() {
+            self.relation.sub_relations.load(db, &mut children).await?;
+        }
+
+        // Step 3: Group and attach (same as existing logic)
+        let mut grouped: HashMap<i64, Vec<To::Model>> = HashMap::new();
+
+        for child in children {
+            if let Some(key) = self.relation.relation.child_key(&child) {
+                grouped.entry(key).or_default().push(child);
+            }
+        }
+
+        for parent in parents.iter_mut() {
+            if let Some(key) = self.relation.relation.parent_key(parent) {
+                let related = grouped.remove(&key).unwrap_or_default();
+                self.relation.relation.attach(parent, related);
+            }
+        }
+
+        // Step 4: Continue with sibling relations
+        self.tail.load(db, parents).await
     }
 }

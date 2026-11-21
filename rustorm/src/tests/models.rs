@@ -160,13 +160,17 @@ impl TestUser {
 // ============= TestPost =============
 pub struct TestPost;
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct TestPostModel {
     pub id: i32,
     #[allow(dead_code)]
     pub title: String,
     pub user_id: i32,
+
+    #[sqlx(skip)]
     pub comments: Vec<TestCommentModel>,
+
+    #[sqlx(skip)]
     pub user: Option<Arc<TestUserModel>>,
 }
 
@@ -224,7 +228,7 @@ impl TestPost {
 // ============= TestComment =============
 pub struct TestComment;
 
-#[derive(Debug)]
+#[derive(Debug, sqlx::FromRow)]
 pub struct TestCommentModel {
     #[allow(dead_code)]
     pub id: i32,
@@ -233,11 +237,24 @@ pub struct TestCommentModel {
     #[allow(dead_code)]
     pub post_id: i32,
 }
+impl RelationKey for TestCommentModel {
+    fn relation_key(&self, column: Column) -> Option<i64> {
+        match column.name() {
+            "id" => Some(self.id as i64),
+            "post_id" => Some(self.post_id as i64),
+            _ => None,
+        }
+    }
+}
 
 impl Entity for TestComment {
     type Model = TestCommentModel;
     const TABLE: &'static str = "comments";
-    const COLUMNS: &'static [Column] = &[Column::new("id"), Column::new("body")];
+    const COLUMNS: &'static [Column] = &[
+        Column::new("id"),
+        Column::new("body"),
+        Column::new("post_id"),  // ← ADD THIS
+    ];
 }
 
 impl TestComment {
