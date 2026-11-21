@@ -4,7 +4,7 @@
 
 RustORM aims to bring the developer experience of Prisma/Drizzle to the Rust ecosystem: a schema file, a CLI, and type-safe generated entities, without requiring users to write ORM-specific derive macros.
 
-> ⚠️ **Status:** Active development. The runtime query builder, relations, CRUD operations, bulk operations, transactions, PostgreSQL execution, BindValue layer, and CLI CRUD generation are functional and tested. The separate CLI has a working schema language, parser, validator, entity/relation generator, migration generator, full CRUD code generation, watch mode, migration execution, and `.env`/`config.toml` support. End-to-end verification complete with Axum example.
+> ⚠️ **Status:** Active development. The runtime query builder, relations, CRUD operations, bulk operations, transactions, PostgreSQL execution, BindValue layer, CLI CRUD generation, **nested eager loading**, and **Axum integration** are functional and tested. The separate CLI has a working schema language, parser, validator, entity/relation generator, migration generator, full CRUD code generation, watch mode, migration execution, and `.env`/`config.toml` support. End-to-end verification complete with Axum example including **2-level nested eager loading**.
 
 ---
 
@@ -127,7 +127,7 @@ The RustORM runtime currently provides:
 - Subqueries
 - Qualified columns
 - Relation metadata
-- Eager relation loading
+- Eager relation loading (single + nested)
 - Single-row CRUD
 - Bulk CRUD
 - PostgreSQL execution
@@ -137,8 +137,34 @@ The RustORM runtime currently provides:
 - Nullable model support
 - **NULL handling in bulk operations**
 - **Mixed NULL/non-NULL placeholder ordering**
+- **Wrapper types (DateTime, Decimal, JsonValue)**
+- **Send + Sync compatibility for async frameworks**
 
 The runtime is designed to remain independent from the schema parser and code-generation layer.
+
+---
+
+# Wrapper Types
+
+RustORM provides wrapper types with built-in serde and sqlx support, eliminating the need for users to add `chrono`, `serde_json`, or `rust_decimal` as direct dependencies:
+
+- ✅ `rustorm::DateTime` (wraps `chrono::NaiveDateTime`)
+- ✅ `rustorm::Decimal` (wraps `rust_decimal::Decimal`)
+- ✅ `rustorm::JsonValue` (wraps `serde_json::Value`)
+
+All wrapper types implement `Serialize`, `Deserialize`, `sqlx::Encode`, `sqlx::Decode`, and `sqlx::Type` for PostgreSQL.
+
+---
+
+# Async Compatibility
+
+The runtime is fully compatible with async web frameworks like Axum:
+
+- ✅ `Entity: Send + Sync`
+- ✅ `RelationLoad: Send + Sync`
+- ✅ `RelationLoad::load()` returns `impl Future + Send`
+- ✅ `all_on_connection()` for recursive relation loading without lifetime issues
+- ✅ Verified with Axum 0.7.9 handlers
 
 ---
 
@@ -338,16 +364,23 @@ The relation system supports relation-specific query behavior and foreign-key fi
 The runtime currently supports:
 
 - ✅ `.with(...)`
+- ✅ `.with_nested(...)` (multi-level)
 - ✅ Foreign-key filtering
 - ✅ Parent-key collection
 - ✅ Relation loading through the query executor
-- ⬜ Nested `.with(...)`
 
 Example:
 
 ```rust
+// Single-level
 let users = User::find()
     .with(User::posts)
+    .all(&db)
+    .await?;
+
+// Nested (2-level)
+let users = User::find()
+    .with_nested(User::posts, |q| q.with(Post::comments))
     .all(&db)
     .await?;
 ```
@@ -646,7 +679,7 @@ cargo check
     ✅
 
 cargo test
-    ✅ 114 passed
+    ✅ 115 passed
     ❌ 0 failed
 
 cargo clippy --all-targets --all-features -- -D warnings
@@ -716,6 +749,8 @@ The runtime provides:
 - Relation infrastructure
 - CRUD execution
 - Transaction-compatible execution
+- Wrapper types
+- Send + Sync bounds
 
 The runtime does not need to know an application's complete schema.
 
@@ -957,6 +992,8 @@ PostgreSQL: CREATE / READ / UPDATE / DELETE
       ↓
 Axum API serving JSON responses
       ↓
+Nested eager loading (User → Posts → Comments)
+      ↓
 ✅ ALL OPERATIONS PASSED
 ```
 
@@ -1068,7 +1105,9 @@ CLI Workflow (init, dev) ✅
      ↓
 Migration Execution ✅
      ↓
-Axum Example ✅
+Nested Eager Loading ✅
+     ↓
+Axum Integration ✅
 ```
 
 ---
@@ -1106,7 +1145,7 @@ One-to-One              ✅
 Many-to-Many            ✅
 .with()                 ✅
 Eager loading           ✅
-Nested .with()          ⬜
+Nested .with_nested()   ✅
 ```
 
 ## CRUD
@@ -1144,6 +1183,8 @@ Executor                ✅
 PostgreSQL              ✅
 Pool                    ✅
 Transactions            ✅
+Wrapper types           ✅
+Send + Sync bounds      ✅
 ORM-level errors        ⬜
 ```
 
@@ -1213,7 +1254,7 @@ Clippy                  ✅
 Documentation           🚧
 Multi-DB architecture   ⬜
 End-to-end verification ✅
-Axum example            ✅
+Axum integration        ✅
 ```
 
 ---
@@ -1246,6 +1287,8 @@ src/
 ├── tests/
 │   ├── mod.rs
 │   └── models.rs
+├── types/
+│   └── mod.rs
 ├── value/
 │   └── mod.rs
 ├── lib.rs
@@ -1268,6 +1311,8 @@ Entity
    ├── SQL Compiler
    │
    ├── Bind Values
+   │
+   ├── Wrapper Types
    │
    └── Executor
           ├── Create
@@ -1364,9 +1409,6 @@ sqlx = { version = "0.8", features = [
 
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
-chrono = "0.4"
-rust_decimal = "1"
-serde_json = "1"
 ```
 
 ## Use Generated Entities
@@ -1411,7 +1453,7 @@ async fn example(pool: &PgPool) {
 
 # Axum Example
 
-A complete Axum REST API using RustORM generated entities:
+A complete Axum REST API using RustORM generated entities with eager loading:
 
 ```rust
 mod entities {
@@ -1422,47 +1464,79 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::Json,
-    routing::{delete, get, post, put},
+    routing::get,
     Router,
 };
-use entities::{User, UserCreate, UserUpdate};
+use entities::{User, Post, UserModel, PostModel};
 use rustorm::Entity;
+use serde::Serialize;
 use sqlx::PgPool;
 
 #[derive(Clone)]
 struct AppState { db: PgPool }
 
-async fn list_users(State(state): State<AppState>) -> Json<Vec<entities::UserModel>> {
+// DTO pattern for clean API responses
+#[derive(Serialize)]
+struct UserWithPostsResponse {
+    #[serde(flatten)]
+    user: UserResponse,
+    posts: Vec<PostResponse>,
+}
+
+#[derive(Serialize)]
+struct PostWithCommentsResponse {
+    #[serde(flatten)]
+    post: PostResponse,
+    comments: Vec<CommentResponse>,
+}
+
+#[derive(Serialize)]
+struct UserWithNestedResponse {
+    #[serde(flatten)]
+    user: UserResponse,
+    posts: Vec<PostWithCommentsResponse>,
+}
+
+// Basic CRUD
+async fn list_users(State(state): State<AppState>) -> Json<Vec<UserModel>> {
     Json(User::find().all(&state.db).await.unwrap_or_default())
 }
 
-async fn create_user(
-    State(state): State<AppState>,
-    Json(input): Json<UserCreate>,
-) -> Result<(StatusCode, Json<entities::UserModel>), StatusCode> {
-    let user = User::create(&state.db, input).await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok((StatusCode::CREATED, Json(user)))
+// Single-level eager loading (N:1)
+async fn list_posts_with_user(State(state): State<AppState>) -> Json<Vec<PostWithUserResponse>> {
+    let posts = Post::find()
+        .with(Post::user)
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let response = posts.iter().map(|post| PostWithUserResponse {
+        post: PostResponse::from(post),
+        user: post.user.as_deref().map(UserResponse::from),
+    }).collect();
+
+    Json(response)
 }
 
-async fn update_user(
+// 2-level nested eager loading (User → Posts → Comments)
+async fn list_users_with_posts_comments(
     State(state): State<AppState>,
-    Path(id): Path<i32>,
-    Json(input): Json<UserUpdate>,
-) -> Result<Json<entities::UserModel>, StatusCode> {
-    let user = User::update(&state.db, id, input).await
-        .map_err(|_| StatusCode::NOT_FOUND)?;
-    Ok(Json(user))
-}
+) -> Json<Vec<UserWithNestedResponse>> {
+    let users = User::find()
+        .with_nested(User::posts, |q| q.with(Post::comments))
+        .all(&state.db)
+        .await
+        .unwrap_or_default();
 
-async fn delete_user(
-    State(state): State<AppState>,
-    Path(id): Path<i32>,
-) -> StatusCode {
-    match User::delete(&state.db, id).await {
-        Ok(n) if n > 0 => StatusCode::NO_CONTENT,
-        _ => StatusCode::NOT_FOUND,
-    }
+    let response = users.iter().map(|user| UserWithNestedResponse {
+        user: UserResponse::from(user),
+        posts: user.posts.iter().map(|post| PostWithCommentsResponse {
+            post: PostResponse::from(post),
+            comments: post.comments.iter().map(CommentResponse::from).collect(),
+        }).collect(),
+    }).collect();
+
+    Json(response)
 }
 
 #[tokio::main]
@@ -1477,8 +1551,9 @@ async fn main() {
     let pool = PgPool::connect(&db_url).await.expect("DB connection failed");
 
     let app = Router::new()
-        .route("/users", get(list_users).post(create_user))
-        .route("/users/{id}", put(update_user).delete(delete_user))
+        .route("/users", get(list_users))
+        .route("/posts/with-user", get(list_posts_with_user))
+        .route("/users/with-posts-comments", get(list_users_with_posts_comments))
         .with_state(AppState { db: pool });
 
     println!("🚀 Server running at http://localhost:3000");
@@ -1487,7 +1562,15 @@ async fn main() {
 }
 ```
 
-**Key point:** Generated types (`UserModel`, `UserCreate`, `UserUpdate`) include `Serialize` and `Deserialize` derives — no wrapper types needed. They work directly with Axum's `Json` extractor.
+**Verified endpoints:**
+
+| Endpoint | Relation Type | Status |
+|---|---|---|
+| `GET /users` | Basic CRUD | ✅ |
+| `GET /posts/with-user` | N:1 (ManyToOne) | ✅ |
+| `GET /users/with-posts` | 1:N (OneToMany) | ✅ |
+| `GET /users/with-profile` | 1:1 (OneToOne) | ✅ |
+| `GET /users/with-posts-comments` | **2-level nested** | ✅ |
 
 Full working example: [`rustorm-example-axum`](https://github.com/Fakhir-Israr-200219/rustorm-example-axum)
 
@@ -1497,18 +1580,24 @@ Full working example: [`rustorm-example-axum`](https://github.com/Fakhir-Israr-2
 
 The immediate development focus is:
 
-1. **Quality improvements:**
+1. **Generator automation:**
+   - `@map` → auto-generate `#[sqlx(rename)]`
+   - `created_at` auto-default exclusion from create structs
+   - Smart `#[serde(skip)]` for back-references
+   - M2M duplicate relation bug fix
+
+2. **Quality improvements:**
    - Documentation (mdbook guide)
    - crates.io publication
+   - ORM-level error types
    - Visibility cleanup
 
-2. **Feature completeness:**
-   - Nested `.with()` eager loading
+3. **Feature completeness:**
    - Migration tracking table
    - Schema diffing (incremental migrations)
    - Rollback support
 
-3. **Multi-database support:**
+4. **Multi-database support:**
    - MySQL
    - SQLite
 
@@ -1601,59 +1690,57 @@ The project is also inspired by the frustration of writing macros and repetitive
 
 RustORM is in **active development** with major milestones completed.
 
-The runtime query engine, relations, CRUD operations, bulk operations, transaction support, PostgreSQL execution, BindValue layer (including NULL handling in bulk operations), CLI CRUD generation, watch mode, migration execution, and `.env`/`config.toml` configuration are all functional and tested.
+The runtime query engine, relations, CRUD operations, bulk operations, transaction support, PostgreSQL execution, BindValue layer (including NULL handling in bulk operations), CLI CRUD generation, watch mode, migration execution, `.env`/`config.toml` configuration, **nested eager loading**, and **Axum integration** are all functional and tested.
 
 Current runtime verification:
 
 ```text
-cargo check
-    ✅
-
-cargo test
-    ✅ 114 passed
-    ❌ 0 failed
-
-cargo clippy --all-targets --all-features -- -D warnings
-    ✅
+cargo check             ✅
+cargo test              ✅ 115 passed, 0 failed
+cargo clippy            ✅
+Axum integration        ✅ Verified
+Nested eager loading    ✅ Verified (2-level)
+Wrapper types           ✅ DateTime, Decimal, JsonValue
+Send + Sync             ✅ All traits + structs
 ```
 
 The separate CLI currently has:
 
 ```text
-Schema language        ✅
-Lexer                  ✅
-Parser                 ✅
-Representation         ✅
-Validator              ✅
-Entity generator       ✅
-Relation generator     ✅
-Create structs         ✅
-InsertData generation  ✅
-Update structs         ✅
-UpdateData generation  ✅
-Serde derives          ✅
-Migration generator    ✅
-Migration execution    ✅
-Shared naming module   ✅
-rustorm init           ✅
-rustorm dev (watch)    ✅
-.env support           ✅
-config.toml support    ✅
-.gitignore generation  ✅
-Snapshot detection     ✅
+Schema language         ✅
+Lexer                   ✅
+Parser                  ✅
+Representation          ✅
+Validator               ✅
+Entity generator        ✅
+Relation generator      ✅
+Create structs          ✅
+InsertData generation   ✅
+Update structs          ✅
+UpdateData generation   ✅
+Serde derives           ✅
+Migration generator     ✅
+Migration execution     ✅
+Shared naming module    ✅
+rustorm init            ✅
+rustorm dev (watch)     ✅
+.env support            ✅
+config.toml support     ✅
+.gitignore generation   ✅
+Snapshot detection      ✅
 
-Tests                  61 passed
-Clippy                 clean
+Tests                   61 passed
+Clippy                  clean
 ```
 
-**End-to-end verification:** ✅ Complete — Schema → entities → migrations → PostgreSQL CRUD → Axum API all verified.
+**End-to-end verification:** ✅ Complete — Schema → entities → migrations → PostgreSQL CRUD → Axum API with nested eager loading all verified.
 
 The immediate next milestone is:
 
 ```text
-Documentation + crates.io publish
+Generator automation (@map, serde skip, created_at)
         ↓
-Nested .with()
+Documentation + crates.io publish
         ↓
 Migration tracking + rollback
         ↓
@@ -1676,27 +1763,3 @@ The long-term goal remains:
 
 > **The goal: Prisma-like ergonomics for Rust, while keeping Rust and SQL visible underneath.**
 ```
-
----
-
-## Changes Made (Nothing Deleted)
-
-| Section | Change |
-|---|---|
-| Status banner | Added watch mode, migration execution, .env/config.toml, Axum example |
-| Vision §2 | Updated commands to `init`, `dev`, `migrate --apply` |
-| CLI section | Added 8 new ✅ items (init, dev, migrate --apply, .env, config.toml, .gitignore, serde derives, snapshot) |
-| CLI CRUD Generation | Added note about serde derives enabling direct Axum usage |
-| Generated Entities | Added `(with Serialize, Deserialize, FromRow)` annotations |
-| Migrations | Changed `Run` from ⬜ to ✅ |
-| **NEW: Configuration section** | Documents .env, config.toml, CLI arg priority |
-| End-to-End Verification | Updated flow to include init, dev, migrate --apply, Axum |
-| Roadmap > CLI | All 9 items now ✅ |
-| Roadmap > Generator | Added `Serde derives ✅` |
-| Roadmap > Migrations | `Run (--apply) ✅` |
-| Roadmap > Quality | Added `Axum example ✅` |
-| Getting Started | Complete rewrite with quick start, project structure, dependencies |
-| **NEW: Axum Example section** | Full working code showing direct generated type usage |
-| What's Next | Updated to reflect completed milestones |
-| Status footer | Updated CLI checklist with all new items |
-
