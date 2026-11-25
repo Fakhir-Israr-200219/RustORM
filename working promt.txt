@@ -18,7 +18,7 @@ Bhai, bilkul! Ab sab kuch **Zyvor** branding ke saath update karte hain. Yeh lo 
 | **VS Code Syntax Highlighting** | 1-2 days | `.zyvor` file support, keyword coloring |
 
 ### 🟢 P2 — Visibility + Polish
-| Task | Effort | Detail |
+| Task | Effort | Detail |`
 |---|---|---|
 | **LinkedIn Post / Blog** | 2 hrs | Demo GIF + "Building an ORM in Rust" story |
 | **Portfolio Website Pe Feature** | 1 hr | Zyvor as centerpiece project |

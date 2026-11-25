@@ -99,6 +99,7 @@ where
             _entity: PhantomData,
         }
     }
+    #[allow(clippy::type_complexity)]
     pub fn with_nested<To, C, F, SubR>(
         self,
         relation: crate::query::relation::Relation<E, To, C>,
@@ -454,7 +455,7 @@ where
     {
         let mut conn = db.acquire().await?;
 
-        self.all_on_connection(&mut *conn).await
+        self.all_on_connection(&mut conn).await
     }
 
     pub(crate) async fn all_on_connection(

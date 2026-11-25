@@ -187,15 +187,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 fn parse_unique_violation(msg: &str) -> (String, String) {
     // Pattern: ...constraint "users_email_key"
-    if let Some(constraint) = msg.split('"').nth(1) {
-        if let Some(field) = constraint.strip_suffix("_key") {
-            if let Some(table_end) = field.rfind('_') {
-                return (
-                    field[..table_end].to_string(),
-                    field[table_end + 1..].to_string(),
-                );
-            }
-        }
+    if let Some(constraint) = msg.split('"').nth(1)
+        && let Some(field) = constraint.strip_suffix("_key")
+        && let Some(table_end) = field.rfind('_')
+    {
+        return (
+            field[..table_end].to_string(),
+            field[table_end + 1..].to_string(),
+        );
     }
     ("unknown".to_string(), "unknown".to_string())
 }

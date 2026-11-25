@@ -1901,7 +1901,7 @@ fn insert_with_null_and_values_preserves_order() {
     // Binds should be [25, "test"] in that order
 
     let _columns: &[&str] = &["name", "age", "email"];
-    let values = vec![
+    let values = [
         BindValue::Null,
         BindValue::I64(25),
         BindValue::String("test@example.com".into()),
@@ -1927,7 +1927,7 @@ fn insert_with_null_and_values_preserves_order() {
             }
         }
     }
-    sql.push_str(")");
+    sql.push(')');
 
     assert_eq!(
         sql,
@@ -1946,8 +1946,8 @@ fn insert_with_null_and_values_preserves_order() {
 }
 #[tokio::test]
 async fn test_nested_with_loading() {
-    use crate::tests::models::{TestUser, TestPost};
     use crate::query::builder::Query;
+    use crate::tests::models::{TestPost, TestUser};
 
     let db_url = "postgres://postgres:admin@localhost/rustorm";
 
@@ -1969,29 +1969,41 @@ async fn test_nested_with_loading() {
     // Query only our isolated test data
     let users = Query::<TestUser>::new()
         .where_(TestUser::id.gte(9001))
-        .with_nested(TestUser::posts, |q| {
-            q.with(TestPost::comments)
-        })
+        .with_nested(TestUser::posts, |q| q.with(TestPost::comments))
         .all(&pool)
         .await
         .expect("Nested with query failed");
 
     assert_eq!(users.len(), 2, "Should load 2 nested test users");
 
-    let alice = users.iter().find(|u| u.id == 9001).expect("NestedAlice not found");
+    let alice = users
+        .iter()
+        .find(|u| u.id == 9001)
+        .expect("NestedAlice not found");
     assert_eq!(alice.posts.len(), 2, "NestedAlice should have 2 posts");
 
-    let post_a = alice.posts.iter().find(|p| p.id == 9010).expect("NestedPostA not found");
-    assert_eq!(post_a.comments.len(), 2, "NestedPostA should have 2 comments");
+    let post_a = alice
+        .posts
+        .iter()
+        .find(|p| p.id == 9010)
+        .expect("NestedPostA not found");
+    assert_eq!(
+        post_a.comments.len(),
+        2,
+        "NestedPostA should have 2 comments"
+    );
 
-    let bob = users.iter().find(|u| u.id == 9002).expect("NestedBob not found");
+    let bob = users
+        .iter()
+        .find(|u| u.id == 9002)
+        .expect("NestedBob not found");
     assert_eq!(bob.posts.len(), 1, "NestedBob should have 1 post");
 
     // Cleanup ONLY our test data
     sqlx::raw_sql(
         "DELETE FROM comments WHERE id >= 9100;
          DELETE FROM posts WHERE id >= 9010;
-         DELETE FROM users WHERE id >= 9001;"
+         DELETE FROM users WHERE id >= 9001;",
     )
     .execute(&pool)
     .await
