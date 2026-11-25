@@ -1,44 +1,44 @@
-🟡 P1
-Cleanup warnings (Runtime clippy)
-30 min
-Quality
-4 locations in builder.rs + tests
-🟡 P1
-Entity/Field names in error classification
-1 hr
-Runtime
-"unknown" → actual names
-🟢 P2
-VS Code Syntax Highlighting
-1-2 days
-DX
-Immediate IDE value
-🟢 P2
-Documentation (mdbook)
-5 hrs
-Docs
-User guide
-🟢 P2
-crates.io publish prep
-2 hrs
-Release
-After docs ready
-⚪ P3
-VS Code LSP Diagnostics
-3-5 days
-DX
-After syntax highlighting
-⚪ P3
-Rollback support
-3 hrs
-Migrations
-Nice-to-have
-⚪ P3
-Auto-complete + hover docs
-1 week
-DX
-Polish phase
+Bhai, bilkul! Ab sab kuch **Zyvor** branding ke saath update karte hain. Yeh lo revised roadmap:
 
+## 🚀 Zyvor Roadmap (Updated)
+
+### 🔴 P0 — Ship Karo (This Week)
+| Task | Effort | Detail |
+|---|---|---|
+| **Rename RustORM → Zyvor** | 1 hr | Cargo.toml, CLI binary, imports, schema extension |
+| **Professional README + Architecture Diagram** | 2 hrs | Zyvor branding, features table, quick start |
+| **Crates.io Publish Prep** | 2 hrs | Metadata, license, description, categories |
+
+### 🟡 P1 — Quality + Docs
+| Task | Effort | Detail |
+|---|---|---|
+| **Clippy Warnings Fix** | 30 min | 4 locations in builder.rs + tests |
+| **FK `referenced_entity` Parsing** | 1 hr | Error classification mein last gap fix |
+| **mdbook Documentation** | 5 hrs | Getting started, schema reference, API guide |
+| **VS Code Syntax Highlighting** | 1-2 days | `.zyvor` file support, keyword coloring |
+
+### 🟢 P2 — Visibility + Polish
+| Task | Effort | Detail |
+|---|---|---|
+| **LinkedIn Post / Blog** | 2 hrs | Demo GIF + "Building an ORM in Rust" story |
+| **Portfolio Website Pe Feature** | 1 hr | Zyvor as centerpiece project |
+| **Rollback Support** | 3 hrs | Migration undo capability |
+
+### ⚪ P3 — Advanced DX
+| Task | Effort | Detail |
+|---|---|---|
+| **VS Code LSP Diagnostics** | 3-5 days | Real-time schema validation |
+| **Auto-complete + Hover Docs** | 1 week | Field names, relation suggestions |
+
+## ⚡ Aaj Ka Plan
+
+```
+Step 1: Rename RustORM → Zyvor (CLI + Runtime + Example)
+Step 2: README + Architecture Diagram (Zyvor branding)
+Step 3: Crates.io metadata prep
+```
+
+**Pehle rename start karein bhai?** Main step-by-step guide dunga har file ke liye! 💪🚀
 
 RUSTORM — WORKING ROADMAP / CHECKPOINT
 =======================================

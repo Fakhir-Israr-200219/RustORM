@@ -7,10 +7,7 @@ pub enum Error {
     Database(sqlx::Error),
 
     /// Entity not found by primary key
-    NotFound {
-        entity: &'static str,
-        id: i64,
-    },
+    NotFound { entity: &'static str, id: i64 },
 
     /// Unique constraint violation
     UniqueViolation {
@@ -65,11 +62,25 @@ impl fmt::Display for Error {
             Error::NotFound { entity, id } => {
                 write!(f, "{entity} with id {id} not found")
             }
-            Error::UniqueViolation { entity, field, value } => {
-                write!(f, "Unique constraint violated on {entity}.{field}: '{value}' already exists")
+            Error::UniqueViolation {
+                entity,
+                field,
+                value,
+            } => {
+                write!(
+                    f,
+                    "Unique constraint violated on {entity}.{field}: '{value}' already exists"
+                )
             }
-            Error::ForeignKeyViolation { entity, field, referenced_entity } => {
-                write!(f, "Foreign key violation on {entity}.{field}: referenced {referenced_entity} does not exist")
+            Error::ForeignKeyViolation {
+                entity,
+                field,
+                referenced_entity,
+            } => {
+                write!(
+                    f,
+                    "Foreign key violation on {entity}.{field}: referenced {referenced_entity} does not exist"
+                )
             }
             Error::Migration(e) => write!(f, "Migration error: {e}"),
             Error::Generation(msg) => write!(f, "Code generation error: {msg}"),
@@ -83,7 +94,11 @@ impl fmt::Display for MigrationError {
             MigrationError::FileNotFound(path) => {
                 write!(f, "Migration file not found: {path}")
             }
-            MigrationError::DriftDetected { migration, expected_checksum, actual_checksum } => {
+            MigrationError::DriftDetected {
+                migration,
+                expected_checksum,
+                actual_checksum,
+            } => {
                 write!(
                     f,
                     "Schema drift detected in '{migration}': expected checksum {expected_checksum}, got {actual_checksum}. \
@@ -91,7 +106,10 @@ impl fmt::Display for MigrationError {
                 )
             }
             MigrationError::AlreadyAppliedDifferent(name) => {
-                write!(f, "Migration '{name}' already applied with different content")
+                write!(
+                    f,
+                    "Migration '{name}' already applied with different content"
+                )
             }
             MigrationError::ExecutionFailed { migration, source } => {
                 write!(f, "Failed to execute migration '{migration}': {source}")
@@ -132,16 +150,19 @@ impl From<sqlx::Error> for Error {
                 // PostgreSQL error codes
                 // 23505 = unique_violation
                 // 23503 = foreign_key_violation
+                // ✅ NAYA
                 if code == "23505" {
+                    let (entity, field) = parse_unique_violation(message);
                     Error::UniqueViolation {
-                        entity: "unknown",
-                        field: "unknown",
+                        entity: Box::leak(entity.into_boxed_str()),
+                        field: Box::leak(field.into_boxed_str()),
                         value: message.to_string(),
                     }
                 } else if code == "23503" {
+                    let (entity, field) = parse_fk_violation(message);
                     Error::ForeignKeyViolation {
-                        entity: "unknown",
-                        field: "unknown",
+                        entity: Box::leak(entity.into_boxed_str()),
+                        field: Box::leak(field.into_boxed_str()),
                         referenced_entity: "unknown",
                     }
                 } else {
@@ -161,3 +182,40 @@ impl From<MigrationError> for Error {
 
 /// Convenience Result type alias
 pub type Result<T> = std::result::Result<T, Error>;
+
+// ==================== PG ERROR PARSERS ====================
+
+fn parse_unique_violation(msg: &str) -> (String, String) {
+    // Pattern: ...constraint "users_email_key"
+    if let Some(constraint) = msg.split('"').nth(1) {
+        if let Some(field) = constraint.strip_suffix("_key") {
+            if let Some(table_end) = field.rfind('_') {
+                return (
+                    field[..table_end].to_string(),
+                    field[table_end + 1..].to_string(),
+                );
+            }
+        }
+    }
+    ("unknown".to_string(), "unknown".to_string())
+}
+
+fn parse_fk_violation(msg: &str) -> (String, String) {
+    let table = msg
+        .split("table \"")
+        .nth(1)
+        .and_then(|s| s.split('"').next())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let field = msg
+        .split("constraint \"")
+        .nth(1)
+        .and_then(|s| s.split('"').next())
+        .and_then(|c| c.strip_suffix("_fkey"))
+        .and_then(|c| c.find('_').map(|i| &c[i + 1..]))
+        .unwrap_or("unknown")
+        .to_string();
+
+    (table, field)
+}
